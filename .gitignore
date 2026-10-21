@@ -218,3 +218,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- Mediaplayer ---
+# Editoren / Betriebssystem
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Lokale Claude-Code-Einstellungen
+.claude/
+
+# Eigene Playlists (enthalten lokale Pfade)
+playlists/
