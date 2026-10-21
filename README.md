@@ -193,8 +193,14 @@ mediaplayer/
     recent_playlists_dialog.py  Schnellauswahl „Zuletzt“
     widgets.py                  Große Listen, Touch-Scrollen, Dialoggröße
     style.py                    Stylesheet, Klick-springt-Stil für Regler
+  selftest.py                   Selbsttest für gepackte Versionen (--selftest)
 tests/
   test_mediaplayer.py           Automatische Tests
+assets/                         App-Symbol (PNG, ICO)
+installer/mediaplayer.iss       Inno-Setup-Skript (Windows-Installer)
+mediaplayer.spec                PyInstaller-Konfiguration
+tools/                          build_windows.ps1, make_icon.py
+.github/workflows/build.yml     Automatischer Bau (Windows + macOS)
 ```
 
 ### Anpassbare Werte
@@ -203,6 +209,45 @@ tests/
   (`hold_ms` = ab wann „gehalten“, `double_press_ms` = Doppeldruck-Fenster).
 - Spulgeschwindigkeit, Tempo-Grenzen und -Schritte, Lautstärkeschritte und
   -kurve: Konstanten oben in `mediaplayer/player/playback.py`.
+
+## Installationspaket
+
+**Fertige Pakete** baut GitHub Actions bei jedem Push automatisch: unter
+*Actions → Build → letzter Lauf → Artifacts* liegen `Mediaplayer-Windows`
+(Setup-Datei) und `Mediaplayer-macOS` (DMG). Für ein Release mit beiden Dateien
+einen Tag pushen, der zur Version in `mediaplayer/__init__.py` passt:
+
+```bash
+git tag v1.0.0
+```
+
+```bash
+git push origin v1.0.0
+```
+
+**Windows-Setup lokal bauen** (Voraussetzung: `pip install pyinstaller` und
+Inno Setup 6, z. B. `winget install JRSoftware.InnoSetup`):
+
+```bash
+powershell -ExecutionPolicy Bypass -File tools\build_windows.ps1
+```
+
+Ergebnis: `dist\installer\Mediaplayer-Setup-<Version>.exe`. Der Installer
+braucht keine Administratorrechte, legt Startmenü- und auf Wunsch
+Desktop-Verknüpfung an und lässt sich über „Apps & Features“ entfernen.
+Einstellungen, Playlists und BPM-Cache liegen im Benutzerprofil und bleiben
+bei Updates erhalten. Auf dem Zielrechner wird kein Python benötigt.
+
+Hinweise:
+
+- Die Pakete sind nicht signiert. Windows zeigt beim ersten Start „Der Computer
+  wurde durch Windows geschützt“ → *Weitere Informationen → Trotzdem ausführen*.
+  Auf dem Mac die App beim ersten Mal per Rechtsklick → *Öffnen* starten.
+- Das Mac-Paket wird für Apple-Silicon-Macs (M1 und neuer) gebaut.
+- `Mediaplayer --selftest bericht.txt` prüft ein gepacktes Programm ohne
+  Fenster und ohne Tonausgabe (Decoder, BPM-/Stille-Analyse, Wiedergabe,
+  Oberfläche); die Build-Skripte nutzen das automatisch.
+- Das App-Symbol erzeugt `python tools/make_icon.py` (`assets/`).
 
 ## Tests
 

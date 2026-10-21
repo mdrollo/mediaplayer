@@ -220,6 +220,9 @@ __marimo__/
 .streamlit/secrets.toml
 
 # --- Mediaplayer ---
+# Die PyInstaller-Konfiguration gehört ins Repo (oben werden *.spec ignoriert).
+!mediaplayer.spec
+
 # Editoren / Betriebssystem
 .vscode/
 .idea/

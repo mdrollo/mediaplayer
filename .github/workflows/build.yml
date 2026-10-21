@@ -1,0 +1,115 @@
+# Baut Windows-Installer und macOS-Paket.
+#
+# - Jeder Push auf main: beide Pakete als Downloads ("Artifacts") am Lauf.
+# - Tag "v<Version>" (z. B. v1.0.1): zusätzlich ein GitHub-Release mit beiden Dateien.
+#   Die Version im Tag sollte zu __version__ in mediaplayer/__init__.py passen.
+# - Manuell startbar unter Actions -> Build -> "Run workflow".
+
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # für das Anlegen von Releases
+
+env:
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  windows:
+    name: Windows-Installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Abhängigkeiten
+        run: python -m pip install -r requirements.txt pyinstaller
+
+      - name: Version ermitteln
+        id: version
+        shell: pwsh
+        run: |
+          $v = python -c "import mediaplayer; print(mediaplayer.__version__)"
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: PyInstaller
+        run: pyinstaller mediaplayer.spec --noconfirm
+
+      - name: Selbsttest der gepackten Version
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\Mediaplayer\Mediaplayer.exe -ArgumentList "--selftest", "selftest.txt" -Wait -PassThru
+          Get-Content selftest.txt -Encoding UTF8
+          exit $p.ExitCode
+
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" installer\mediaplayer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Mediaplayer-Windows
+          path: dist/installer/*.exe
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/installer/*.exe
+
+  macos:
+    name: macOS-Paket
+    runs-on: macos-latest   # Apple Silicon
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Abhängigkeiten
+        run: python -m pip install -r requirements.txt pyinstaller pillow
+
+      - name: Version ermitteln
+        id: version
+        run: echo "version=$(python -c 'import mediaplayer; print(mediaplayer.__version__)')" >> "$GITHUB_OUTPUT"
+
+      - name: PyInstaller
+        run: pyinstaller mediaplayer.spec --noconfirm
+
+      - name: Selbsttest der gepackten Version
+        run: |
+          dist/Mediaplayer.app/Contents/MacOS/Mediaplayer --selftest selftest.txt; code=$?
+          cat selftest.txt
+          exit $code
+
+      - name: DMG erstellen
+        run: |
+          mkdir -p dist/dmg
+          cp -R dist/Mediaplayer.app dist/dmg/
+          ln -s /Applications dist/dmg/Programme
+          hdiutil create -volname Mediaplayer -srcfolder dist/dmg -ov -format UDZO \
+            "dist/Mediaplayer-${{ steps.version.outputs.version }}-macOS.dmg"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Mediaplayer-macOS
+          path: dist/*.dmg
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.dmg
