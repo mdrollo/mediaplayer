@@ -84,8 +84,9 @@ def run_selftest(out_file: str) -> int:
             analyzer.analyze(str(track))
             _wait(lambda: bool(results), 30)
             if results:
-                _, bpm, start, end = results[0]
+                _, bpm, start, end, (peaks, _rms) = results[0]
                 check("Audio-Decoder", start >= 0, f"Musik {start:.1f}–{end:.1f} s")
+                check("Wellenform", len(peaks) > 100, f"{len(peaks)} Punkte")
                 check("BPM-Erkennung", abs(bpm - 120) <= 2, f"{bpm:.1f} BPM (erwartet 120)")
                 check("Stille-Erkennung", 1.5 <= start <= 2.1, f"Musikanfang {start:.2f} s (erwartet ~1,9)")
             else:

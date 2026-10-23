@@ -34,7 +34,8 @@ stattdessen als maximiertes Fenster.
 
 | Element | Funktion |
 |---|---|
-| Zeitanzeige + Positionsregler | Klicken springt direkt an die Stelle, Ziehen verschiebt die Position |
+| Kopfzeile | Links Zeit, mittig der Name der aktuellen Playlist (zuletzt geladene/gespeicherte Datei, ohne Pfad und Endung), rechts Uhrzeit |
+| Zeitanzeige + Positionsregler | Zeigt die Wellenform des Titels (gespielter Teil blau). Klicken springt direkt an die Stelle, Ziehen verschiebt die Position |
 | ⏮ ⏯ ⏹ ⏭ | Vorheriger Titel · Play/Pause · Stop · Nächster Titel |
 | Pausen überspringen | Stille am Anfang und Ende der Titel überspringen (Standard: an; blau = aktiv) |
 | Lautstärkeregler | 0–100 %, gehörrichtig (logarithmisch) skaliert |
@@ -66,6 +67,19 @@ sobald die Musik am Ende verklungen ist, startet der nächste Titel.
 - „Zurück“ (kurz) springt ebenfalls zum Musikanfang.
 - Stille *mitten* im Titel (z. B. vor einem versteckten Bonustrack) wird nicht
   übersprungen.
+
+### Wellenform
+
+Hinter dem Positionsregler erscheint die Wellenform des geladenen Titels:
+links vom weißen Abspielstrich blau (bereits gespielt), rechts grau. Die
+hellen Kerne zeigen die mittlere Lautstärke, die zarten Ränder die
+Spitzenwerte – so sind leise Passagen, Pausen und Ausblenden auf einen Blick
+zu sehen.
+
+Die Wellenform entsteht in derselben Hintergrundanalyse wie BPM und Pausen
+(einmal pro Datei) und liegt danach als kleine Datei (≈ 4 KB) im Ordner
+`waveforms` neben `bpm_cache.json`. Solange sie für einen Titel noch
+berechnet wird, zeigt der Regler einen einfachen Fortschrittsbalken.
 
 ### Tempo in BPM
 
@@ -200,6 +214,7 @@ mediaplayer/
     analysis.py                 Hintergrundanalyse (Decoder, Warteschlange, Cache)
     bpm.py                      Tempo-Erkennung (numpy)
     silence.py                  Erkennung von Musikanfang/-ende
+    waveform.py                 Wellenform berechnen
     tempo.py                    TempoController (BPM einstellen, BPM fest, Tap)
     markers.py                  MarkerController (Markierungen setzen, anspringen)
   playlist/
@@ -214,6 +229,7 @@ mediaplayer/
     file_browser.py             Eigener großer Dateidialog
     recent_playlists_dialog.py  Schnellauswahl „Zuletzt“
     widgets.py                  Große Listen, Touch-Scrollen, Dialoggröße
+    waveform_slider.py          Positionsregler mit Wellenform
     style.py                    Stylesheet, Klick-springt-Stil für Regler
   selftest.py                   Selbsttest für gepackte Versionen (--selftest)
 tests/

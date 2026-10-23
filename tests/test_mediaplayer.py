@@ -527,11 +527,16 @@ class BpmDetectionTests(unittest.TestCase):
             analyzer.deleteLater()
             wait(100)
             self.assertEqual(len(results), 1)
-            p, bpm, start, end = results[0]
+            p, bpm, start, end, (peaks, rms) = results[0]
             self.assertEqual(p, path)
             self.assertAlmostEqual(bpm, 124, delta=1.5)
             self.assertAlmostEqual(start, 2.9, delta=0.15)
             self.assertAlmostEqual(end, 43.1, delta=0.4)
+            # Wellenform: 2000 Punkte, still am Anfang (3 von 48 s), laut in der Mitte.
+            self.assertEqual(len(peaks), 2000)
+            self.assertEqual(len(rms), 2000)
+            self.assertLess(max(peaks[:100]), 10)
+            self.assertGreater(max(peaks[500:1500]), 200)
 
 
 class SilenceTests(unittest.TestCase):
@@ -562,8 +567,158 @@ class SilenceTests(unittest.TestCase):
             s.store_bpm(f, 61.0, manual=True)
             s.store_analysis(f, bpm=122.0, start=1.5, end=100.0)  # automatische Analyse
             self.assertEqual(s.cached_bpm(f), (61.0, True))
+            self.assertFalse(s.is_analysis_complete(f))  # Wellenform fehlt noch
+            s.store_waveform(f, b"\x01\x02", b"\x00\x01")
             self.assertTrue(s.is_analysis_complete(f))
+            self.assertEqual(s.cached_waveform(f), (b"\x01\x02", b"\x00\x01"))
             self.assertEqual(s.cached_analysis(f)["start"], 1.5)
+            Path(f).write_bytes(b"geaendert")  # Datei geändert -> alles neu analysieren
+            self.assertIsNone(s.cached_waveform(f))
+            self.assertIsNone(s.cached_analysis(f))
+
+
+class WaveformTests(unittest.TestCase):
+    def test_accumulator_independent_of_buffer_sizes(self):
+        import numpy as np
+
+        from mediaplayer.player.waveform import WaveformAccumulator, build_waveform
+
+        rng = np.random.default_rng(3)
+        x = (rng.normal(0, 0.2, 11025 * 30) * np.linspace(0, 1, 11025 * 30)).astype(np.float32)
+        whole = WaveformAccumulator(11025)
+        whole.add(x)
+        chunked = WaveformAccumulator(11025)
+        for part in np.array_split(x, 977):  # ungerade Puffergrößen wie vom Decoder
+            chunked.add(part)
+        a, b = whole.finish(), chunked.finish()
+        np.testing.assert_allclose(a[0], b[0])
+        peaks, rms = build_waveform(*a, points=500)
+        self.assertEqual((len(peaks), len(rms)), (500, 500))
+        self.assertEqual(max(peaks), 255)            # auf den lautesten Punkt normiert
+        self.assertLess(peaks[0], peaks[-1])          # Lautstärke steigt an
+        self.assertTrue(all(r <= p for p, r in zip(peaks, rms)))
+
+    def test_silence_gives_empty_waveform(self):
+        import numpy as np
+
+        from mediaplayer.player.waveform import build_waveform
+
+        zeros = np.zeros(100, dtype=np.float32)
+        self.assertEqual(build_waveform(zeros, zeros), (b"", b""))
+
+    def test_slider_draws_waveform(self):
+        import numpy as np
+
+        from mediaplayer.ui.style import STYLESHEET, PlayerStyle
+        from mediaplayer.ui.waveform_slider import WaveformSlider
+
+        style = PlayerStyle()  # Referenz halten: QWidget.setStyle übernimmt das Objekt nicht
+        slider = WaveformSlider()
+        slider.setStyle(style)
+        slider.setStyleSheet(STYLESHEET)
+        slider.resize(800, 100)
+        slider.setRange(0, 1000)
+        slider.setValue(500)
+        self.assertFalse(slider.has_waveform())
+        slider.grab()  # Balken ohne Wellenform darf nicht abstürzen
+        peaks = (np.abs(np.sin(np.linspace(0, 20, 2000))) * 255).astype(np.uint8).tobytes()
+        slider.set_waveform((peaks, bytes(len(peaks))))
+        self.assertTrue(slider.has_waveform())
+        image = slider.grab().toImage()
+        # Links vom Abspielstrich blau (gespielt), rechts grau.
+        left = image.pixelColor(200, 50)
+        right = image.pixelColor(600, 50)
+        self.assertGreater(left.blue(), left.red() + 40)
+        self.assertLess(abs(right.blue() - right.red()), 30)
+        slider.set_waveform(None)
+        self.assertFalse(slider.has_waveform())
+        slider.deleteLater()
+
+
+class PlaylistTitleTests(unittest.TestCase):
+    """Name der aktuellen Playlist oben mittig im Hauptfenster."""
+
+    def test_title_shown_centered_and_restored(self):
+        from mediaplayer.ui.main_window import MainWindow
+        from mediaplayer.ui.style import STYLESHEET, PlayerStyle
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            d = Path(tmp)
+            song = make_wav(d / "lied.wav", 0.3)
+            playlist = save_playlist_file(d / "Sonntag Jazz.m3u8", [str(song)])
+            settings = AppSettings(QSettings(str(d / "s.ini"), QSettings.Format.IniFormat))
+            style = PlayerStyle()
+            app.setStyle(style)
+            app.setStyleSheet(STYLESHEET)
+
+            w = MainWindow(settings)
+            w.resize(1600, 900)
+            w.show()
+            wait(100)
+            self.assertEqual(w.playlist_title.full_text(), "")
+            w.open_playlist_file(str(playlist))
+            wait(100)
+            self.assertEqual(w.playlist_title.full_text(), "Sonntag Jazz")  # ohne Pfad und Endung
+            self.assertEqual(w.playlist_title.text(), "Sonntag Jazz")
+            # Exakt mittig im Fenster (±2 px), unabhängig von Zeit und Uhr.
+            center = w.playlist_title.mapTo(w, w.playlist_title.rect().center()).x()
+            self.assertAlmostEqual(center, w.width() / 2, delta=2)
+
+            # Sehr lange Namen werden gekürzt statt das Layout zu verschieben.
+            w.playlist_title.set_full_text("Sehr langer Playlistname " * 10)
+            self.assertTrue(w.playlist_title.text().endswith("…"))
+            self.assertAlmostEqual(
+                w.playlist_title.mapTo(w, w.playlist_title.rect().center()).x(), w.width() / 2, delta=2
+            )
+            w.close()
+            w.deleteLater()
+            wait(100)
+
+            # Neustart: Name bleibt erhalten; nach Leeren der Playlist verschwindet er.
+            w2 = MainWindow(settings)
+            self.assertEqual(w2.playlist_title.full_text(), "Sonntag Jazz")
+            w2.playlist_view.setCurrentRow(0)
+            w2.remove_selected()
+            self.assertEqual(w2.playlist_title.full_text(), "")
+            w2.close()
+            w2.deleteLater()
+            wait(100)
+
+
+class PlaylistTitleMigrationTests(unittest.TestCase):
+    def test_name_found_for_older_session(self):
+        """Sitzung ohne gemerkten Namen: passende zuletzt verwendete Playlist wird erkannt."""
+        from mediaplayer.ui.main_window import MainWindow
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            d = Path(tmp)
+            songs = [str(make_wav(d / f"s{i}.wav", 0.2)) for i in range(3)]
+            other = save_playlist_file(d / "Andere.m3u8", songs[:2])
+            match = save_playlist_file(d / "Passend.m3u8", list(reversed(songs)))  # Reihenfolge egal
+            settings = AppSettings(QSettings(str(d / "s.ini"), QSettings.Format.IniFormat))
+            settings.set_session_playlist(songs, 0)
+            settings.set_recent_playlists([str(other), str(match)])
+            self.assertEqual(settings.session_playlist_file(), "")
+
+            w = MainWindow(settings)
+            self.assertEqual(w.playlist_title.full_text(), "Passend")
+            self.assertEqual(settings.session_playlist_file(), str(match))  # ab jetzt gemerkt
+            w.analysis.shutdown()
+            w.close()
+            w.deleteLater()
+            wait(100)
+
+    def test_slider_pending_hint(self):
+        from mediaplayer.ui.waveform_slider import WaveformSlider
+
+        slider = WaveformSlider()
+        slider.resize(600, 100)
+        slider.set_pending(True)
+        slider.grab()  # Hinweis zeichnen darf nicht abstürzen
+        slider.set_waveform((bytes([100] * 50), bytes([50] * 50)))
+        self.assertTrue(slider.has_waveform())
+        slider.grab()
+        slider.deleteLater()
 
 
 class TempoTests(unittest.TestCase):
@@ -579,6 +734,7 @@ class TempoTests(unittest.TestCase):
         self.files = [str(make_wav(d / f"t{i}.wav", 0.5)) for i in range(3)]
         for f, bpm in zip(self.files, (120.0, 100.0, 0.0)):  # 0.0 = kein Takt erkannt
             self.settings.store_analysis(f, bpm=bpm, start=0.0, end=0.5)
+            self.settings.store_waveform(f, b"", b"")  # gilt als vollständig analysiert
         self.c = PlaybackController()
         self.analysis = TrackAnalysisService(self.c, self.settings)
         self.tempo = TempoController(self.c, self.settings, self.analysis)

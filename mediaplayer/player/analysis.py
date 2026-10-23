@@ -3,7 +3,8 @@
 * ``AudioAnalyzer`` dekodiert eine Datei mit ``QAudioDecoder`` (gleiches
   FFmpeg-Backend wie die Wiedergabe) zu Mono-Samples mit niedriger Abtastrate.
   Gespeichert werden nur der Anfang (für BPM und Musikanfang) und ein
-  gleitendes Fenster der letzten Sekunden (für das Musikende) – so bleibt der
+  gleitendes Fenster der letzten Sekunden (für das Musikende); die Wellenform
+  wird fortlaufend zu kleinen Fenstern zusammengefasst – so bleibt der
   Speicherbedarf auch bei stundenlangen Hörbüchern klein. Gerechnet wird in
   einem Hintergrund-Thread.
 * ``TrackAnalysisService`` analysiert den laufenden Titel sofort und danach
@@ -22,6 +23,7 @@ from ..settings import AppSettings
 from .bpm import ANALYSIS_LENGTH_S, ANALYSIS_SKIP_S, analysis_window, estimate_bpm
 from .playback import PlaybackController
 from .silence import music_end, music_start
+from .waveform import WaveformAccumulator, build_waveform
 
 ANALYSIS_RATE = 11025   # Hz – reicht für Rhythmus und Lautstärke
 TAIL_S = 30             # so viele Sekunden vom Ende für die Stille-Erkennung behalten
@@ -30,12 +32,13 @@ TAIL_S = 30             # so viele Sekunden vom Ende für die Stille-Erkennung b
 class AudioAnalyzer(QObject):
     """Analysiert eine Datei; ``analyze(path)`` ersetzt eine laufende Analyse.
 
-    ``finished(path, bpm, start_s, end_s)``: bpm = 0.0, wenn kein Takt erkannt
-    wurde; start/end = -1.0, wenn die Datei nicht dekodiert werden konnte.
+    ``finished(path, bpm, start_s, end_s, waveform)``: bpm = 0.0, wenn kein Takt
+    erkannt wurde; start/end = -1.0, wenn die Datei nicht dekodiert werden
+    konnte; waveform = (Spitzenwerte, RMS) als Bytes, siehe ``waveform.py``.
     """
 
-    finished = Signal(str, float, float, float)
-    _computed = Signal(str, float, float, float)  # intern: aus dem Rechen-Thread zurück
+    finished = Signal(str, float, float, float, object)
+    _computed = Signal(str, float, float, float, object)  # intern: aus dem Rechen-Thread zurück
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
@@ -61,6 +64,7 @@ class AudioAnalyzer(QObject):
         self._tail: collections.deque[np.ndarray] = collections.deque()
         self._tail_size = 0
         self._total = 0
+        self._wave: WaveformAccumulator | None = None
 
     def current_path(self) -> str:
         return self._path
@@ -99,6 +103,9 @@ class AudioAnalyzer(QObject):
         data = np.array(data, dtype=np.float32)  # eigene Kopie
         self._rate = fmt.sampleRate() or ANALYSIS_RATE
         self._total += data.size
+        if self._wave is None:
+            self._wave = WaveformAccumulator(self._rate)
+        self._wave.add(data)
 
         head_limit = (ANALYSIS_SKIP_S + ANALYSIS_LENGTH_S) * self._rate
         if self._head_size < head_limit:
@@ -132,6 +139,7 @@ class AudioAnalyzer(QObject):
         tail = np.concatenate(self._tail) if self._tail else empty
         total_s = self._total / rate
         tail_offset_s = (self._total - tail.size) / rate
+        wave_peaks, wave_power = self._wave.finish() if self._wave else (empty, empty)
         self._reset_buffers()
 
         def work():
@@ -143,7 +151,11 @@ class AudioAnalyzer(QObject):
                     start, end = 0.0, total_s
             except Exception:  # Analyse darf die Wiedergabe nie stören
                 bpm, start, end = 0.0, 0.0, total_s
-            self._computed.emit(f"{generation}|{path}", float(bpm), float(start), float(end))
+            try:
+                waveform = build_waveform(wave_peaks, wave_power)
+            except Exception:
+                waveform = (b"", b"")
+            self._computed.emit(f"{generation}|{path}", float(bpm), float(start), float(end), waveform)
 
         threading.Thread(target=work, name="Audio-Analyse", daemon=True).start()
 
@@ -153,14 +165,14 @@ class AudioAnalyzer(QObject):
         self._decoding = False
         self._reset_buffers()
         if path:
-            self.finished.emit(path, 0.0, -1.0, -1.0)
+            self.finished.emit(path, 0.0, -1.0, -1.0, (b"", b""))
 
-    @Slot(str, float, float, float)
-    def _on_computed(self, tagged_path: str, bpm: float, start: float, end: float) -> None:
+    @Slot(str, float, float, float, object)
+    def _on_computed(self, tagged_path: str, bpm: float, start: float, end: float, waveform) -> None:
         generation, _, path = tagged_path.partition("|")
         if int(generation) == self._generation and path == self._path:
             self._path = ""
-            self.finished.emit(path, bpm, start, end)
+            self.finished.emit(path, bpm, start, end, waveform)
 
 
 class TrackAnalysisService(QObject):
@@ -184,6 +196,10 @@ class TrackAnalysisService(QObject):
 
     def info(self, path: str) -> dict | None:
         return self._settings.cached_analysis(path)
+
+    def waveform(self, path: str) -> tuple[bytes, bytes] | None:
+        """(Spitzenwerte, RMS) für die Anzeige oder None, solange unbekannt."""
+        return self._settings.cached_waveform(path) if path else None
 
     def is_pending(self, path: str) -> bool:
         return bool(path) and not self._settings.is_analysis_complete(path)
@@ -224,11 +240,12 @@ class TrackAnalysisService(QObject):
                 self._analyzer.analyze(path)
                 return
 
-    def _on_finished(self, path: str, bpm: float, start: float, end: float) -> None:
+    def _on_finished(self, path: str, bpm: float, start: float, end: float, waveform) -> None:
         if start < 0:  # nicht dekodierbar: nur "kein Takt" vermerken
             self._settings.store_analysis(path, bpm=0.0, start=0.0, end=0.0)
         else:
             self._settings.store_analysis(path, bpm=bpm, start=start, end=end)
+        self._settings.store_waveform(path, *waveform)  # leer = nicht darstellbar
         if path == self._current:
             self._push_bounds(path)
         self.analyzed.emit(path)

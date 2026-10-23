@@ -1,10 +1,11 @@
 """Wiederverwendbare UI-Bausteine für die großen, touch-tauglichen Listen."""
 
-from PySide6.QtCore import QRect, QSize, Qt
+from PySide6.QtCore import QEvent, QRect, QSize, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
+    QLabel,
     QListWidget,
     QScroller,
     QScrollerProperties,
@@ -186,3 +187,36 @@ def size_dialog(dialog: QDialog, parent: QWidget | None, fraction: float, fullsc
         geo = dialog.frameGeometry()
         geo.moveCenter(window.frameGeometry().center())
         dialog.move(geo.topLeft())
+
+
+class ElidedLabel(QLabel):
+    """Einzeiliges Label, das zu lange Texte mit "…" kürzt statt das Layout zu sprengen."""
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(parent)
+        self._full_text = ""
+        self.set_full_text(text)
+
+    def set_full_text(self, text: str) -> None:
+        self._full_text = text
+        self.setToolTip(text)
+        self._update_elided()
+
+    def full_text(self) -> str:
+        return self._full_text
+
+    def _update_elided(self) -> None:
+        elided = self.fontMetrics().elidedText(self._full_text, Qt.TextElideMode.ElideRight, max(0, self.width()))
+        super().setText(elided)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._update_elided()
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            self._update_elided()  # Schriftgröße aus dem Stylesheet ist jetzt bekannt
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(0, super().minimumSizeHint().height())

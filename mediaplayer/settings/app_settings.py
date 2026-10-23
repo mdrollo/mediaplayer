@@ -9,6 +9,7 @@ Komplexe Werte (Listen) werden als JSON abgelegt, weil ``QSettings`` Listen mit
 nur einem Element je nach Plattform als einfache Zeichenkette zurückgibt.
 """
 
+import hashlib
 import json
 import os
 
@@ -90,6 +91,13 @@ class AppSettings:
             items = []
         index = _clamp_int(self._s.value("session/index", -1), -1, len(items) - 1, -1)
         return [str(p) for p in items], index
+
+    def session_playlist_file(self) -> str:
+        """Zuletzt geladene/gespeicherte Playlist-Datei ("" = keine)."""
+        return str(self._s.value("session/playlist_file", ""))
+
+    def set_session_playlist_file(self, path: str) -> None:
+        self._s.setValue("session/playlist_file", path)
 
     def set_session_playlist(self, items: list[str], index: int) -> None:
         self._s.setValue("session/playlist", json.dumps(items, ensure_ascii=False))
@@ -174,7 +182,47 @@ class AppSettings:
 
     def is_analysis_complete(self, path: str) -> bool:
         entry = self.cached_analysis(path)
-        return entry is not None and "bpm" in entry and "start" in entry and "end" in entry
+        return (
+            entry is not None
+            and "bpm" in entry and "start" in entry and "end" in entry
+            and self._waveform_file(path) is not None
+            and os.path.exists(self._waveform_file(path))
+        )
+
+    # ------------------------------------------------------ Wellenformen
+    # Eine kleine Datei je Titel im Ordner "waveforms" neben dem BPM-Cache.
+    # Der Dateiname enthält Größe und Änderungszeit der Audiodatei: wird sie
+    # verändert, passt der Name nicht mehr und die Wellenform wird neu berechnet.
+    def _waveform_file(self, path: str) -> str | None:
+        sig = self._file_signature(path)
+        if sig is None:
+            return None
+        digest = hashlib.sha1(f"{sig[0]}|{sig[1]}|{sig[2]}".encode("utf-8")).hexdigest()
+        return os.path.join(os.path.dirname(self._bpm_cache_file), "waveforms", f"{digest}.bin")
+
+    def cached_waveform(self, path: str) -> tuple[bytes, bytes] | None:
+        """(Spitzenwerte, RMS) oder None; (b"", b"") = analysiert, aber nicht darstellbar."""
+        file = self._waveform_file(path)
+        if file is None:
+            return None
+        try:
+            with open(file, "rb") as f:
+                data = f.read()
+        except OSError:
+            return None
+        half = len(data) // 2
+        return data[:half], data[half: 2 * half]
+
+    def store_waveform(self, path: str, peaks: bytes, rms: bytes) -> None:
+        file = self._waveform_file(path)
+        if file is None or len(peaks) != len(rms):
+            return
+        try:
+            os.makedirs(os.path.dirname(file), exist_ok=True)
+            with open(file, "wb") as f:
+                f.write(peaks + rms)
+        except OSError:
+            pass  # Cache ist nur eine Beschleunigung
 
     def cached_bpm(self, path: str) -> tuple[float, bool] | None:
         """(BPM, manuell korrigiert?) oder None, wenn unbekannt."""

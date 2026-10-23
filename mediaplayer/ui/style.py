@@ -37,6 +37,11 @@ QLabel#timeLabel {
     font-size: 40px;
     font-weight: bold;
 }
+QLabel#playlistTitle {
+    font-size: 34px;
+    font-weight: 600;
+    color: #f2f2f2;
+}
 QLabel#clockLabel {
     font-size: 40px;
     font-weight: bold;
@@ -167,6 +172,25 @@ QSlider::handle:horizontal {
     margin: -14px 0;
     border-radius: 20px;
     background: #f2f2f2;
+}
+QSlider#positionSlider {
+    min-height: 100px;
+    background: transparent;  /* sonst übermalt Qt die selbst gezeichnete Wellenform */
+}
+QSlider#positionSlider::groove:horizontal {
+    height: 100px;
+    background: transparent;
+    border: none;
+}
+QSlider#positionSlider::sub-page:horizontal,
+QSlider#positionSlider::add-page:horizontal {
+    background: transparent;
+}
+QSlider#positionSlider::handle:horizontal {
+    width: 6px;
+    margin: 0;
+    border-radius: 3px;
+    background: #ffffff;
 }
 QTableWidget {
     font-size: 24px;

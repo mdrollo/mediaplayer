@@ -1,11 +1,13 @@
 """Hauptfenster des Players (für die Bedienung im Vollbild ausgelegt)."""
 
+import os
 from pathlib import Path
 
 from PySide6.QtCore import QDir, QEvent, QSize, QStandardPaths, Qt, QTime, QTimer, Signal
 from PySide6.QtGui import QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -13,6 +15,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSlider,
     QStyle,
     QVBoxLayout,
@@ -45,7 +48,8 @@ from .file_browser import FileBrowserDialog
 from .key_config_dialog import KeyConfigDialog
 from .recent_playlists_dialog import RecentPlaylistsDialog
 from .style import BUTTON_HEIGHT, ICON_SIZE
-from .widgets import MarkerSlider, enable_touch_scrolling
+from .waveform_slider import WaveformSlider
+from .widgets import ElidedLabel, enable_touch_scrolling
 
 MESSAGE_TIMEOUT_MS = 6000
 
@@ -118,22 +122,40 @@ class MainWindow(QMainWindow):
         root.setContentsMargins(36, 28, 36, 28)
         root.setSpacing(20)
 
-        # --- Zeit und Meldungen
-        top = QHBoxLayout()
+        # --- Zeit | Playlist-Name | Meldungen + Uhr
+        # Drei gleich breite Spalten, damit der Playlist-Name exakt mittig steht,
+        # egal wie breit Zeitanzeige, Meldung oder Uhr gerade sind.
+        top = QGridLayout()
+        top.setHorizontalSpacing(20)
         self.time_label = QLabel("0:00 / 0:00")
         self.time_label.setObjectName("timeLabel")
-        top.addWidget(self.time_label)
-        top.addStretch(1)
+        self.time_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        top.addWidget(self.time_label, 0, 0)
+
+        self.playlist_title = ElidedLabel()
+        self.playlist_title.setObjectName("playlistTitle")
+        self.playlist_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        top.addWidget(self.playlist_title, 0, 1)
+
+        right = QHBoxLayout()
+        right.setSpacing(30)
         self.message_label = QLabel("")
         self.message_label.setObjectName("messageLabel")
         self.message_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.message_label.setWordWrap(True)
-        top.addWidget(self.message_label, 2)
-        top.addSpacing(30)
+        right.addWidget(self.message_label, 1)
         self.clock_label = QLabel("")
         self.clock_label.setObjectName("clockLabel")
         self.clock_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        top.addWidget(self.clock_label)
+        right.addWidget(self.clock_label)
+        top.addLayout(right, 0, 2)
+
+        for column in range(3):
+            top.setColumnStretch(column, 1)
+            top.setColumnMinimumWidth(column, 0)
+        # Größenwünsche der Inhalte ignorieren -> Spalten bleiben exakt gleich breit.
+        for widget in (self.time_label, self.playlist_title, self.message_label):
+            widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         root.addLayout(top)
 
         self._clock_timer = QTimer(self)
@@ -142,8 +164,9 @@ class MainWindow(QMainWindow):
         self._clock_timer.start()
         self._update_clock()
 
-        # --- Positionsregler (anklickbar und verschiebbar, siehe PlayerStyle)
-        self.position_slider = MarkerSlider(Qt.Orientation.Horizontal)
+        # --- Positionsregler mit Wellenform und Markierungen
+        #     (anklickbar und verschiebbar, siehe PlayerStyle)
+        self.position_slider = WaveformSlider()
         self.position_slider.setRange(0, 0)
         self.position_slider.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.position_slider.setToolTip("Klicken oder ziehen, um die Position zu ändern")
@@ -355,7 +378,7 @@ class MainWindow(QMainWindow):
             kb.SPEED_DOWN: lambda: self.tempo.step(-1),
             kb.SPEED_RESET: self.tempo.reset,
             # Verzögert öffnen, damit der Dialog nicht innerhalb des Tastenereignisses startet.
-            kb.RECENT_PLAYLISTS: lambda: QTimer.singleShot(0, self.show_recent_playlists),
+            kb.RECENT_PLAYLISTS: lambda: QTimer.singleShot(0, self, self.show_recent_playlists),
             kb.MARKER_SET: self.markers.add_at_current,
             kb.MARKER_PREVIOUS: self.markers.jump_previous,
             kb.MARKER_NEXT: self.markers.jump_next,
@@ -432,6 +455,8 @@ class MainWindow(QMainWindow):
 
     # ============================================================ Tempo
     def _connect_tempo(self) -> None:
+        self.controller.currentIndexChanged.connect(lambda _index: self._update_waveform())
+        self.analysis.analyzed.connect(self._on_analyzed)
         self.tempo.tempoChanged.connect(self._on_tempo_changed)
         self.tempo.message.connect(self.show_message)
         self.lock_button.blockSignals(True)
@@ -468,6 +493,16 @@ class MainWindow(QMainWindow):
         self.half_button.setEnabled(original > 0)
         self.double_button.setEnabled(original > 0)
         self.tap_button.setEnabled(bool(self.controller.playlist.current_path))
+
+    def _on_analyzed(self, path: str) -> None:
+        if path == self.controller.playlist.current_path:
+            self._update_waveform()
+
+    def _update_waveform(self) -> None:
+        path = self.controller.playlist.current_path or ""
+        waveform = self.analysis.waveform(path)
+        self.position_slider.set_waveform(waveform)
+        self.position_slider.set_pending(bool(path) and waveform is None)
 
     def _on_speed_slider(self, value: int) -> None:
         if self._slider_in_bpm:
@@ -565,6 +600,8 @@ class MainWindow(QMainWindow):
         row = self.playlist_view.currentRow()
         if row >= 0:
             self.controller.remove_index(row)
+            if not len(self.controller.playlist):
+                self._set_playlist_file("")  # leere Playlist hat keinen Namen mehr
             self._save_session()
 
     def save_playlist(self) -> None:
@@ -584,6 +621,7 @@ class MainWindow(QMainWindow):
             return
         self.settings.set_last_directory(str(saved.parent))
         self.settings.add_recent_playlist(str(saved))
+        self._set_playlist_file(str(saved))
         self.show_message(f"Playlist gespeichert: {saved.name}")
 
     def load_playlist(self) -> None:
@@ -614,6 +652,7 @@ class MainWindow(QMainWindow):
             return
         self.settings.set_last_directory(str(Path(path).parent))
         self.settings.add_recent_playlist(path)
+        self._set_playlist_file(path)
         self.controller.replace_playlist(items)
         self._save_session()
         text = f"Playlist „{Path(path).stem}“ geladen: {len(self.controller.playlist)} Titel"
@@ -633,7 +672,8 @@ class MainWindow(QMainWindow):
         self._message_token += 1
         token = self._message_token
         self.message_label.setText(text)
-        QTimer.singleShot(MESSAGE_TIMEOUT_MS, lambda: self._clear_message(token))
+        # An das Fenster gebunden: wird es geschlossen, verfällt der Zeitgeber mit.
+        QTimer.singleShot(MESSAGE_TIMEOUT_MS, self, lambda: self._clear_message(token))
 
     def _clear_message(self, token: int) -> None:
         if token == self._message_token:
@@ -651,11 +691,38 @@ class MainWindow(QMainWindow):
             self.showFullScreen()
 
     # ================================================ Zustand speichern
+    def _set_playlist_file(self, path: str) -> None:
+        """Aktuelle Playlist-Datei merken und ihren Namen oben mittig anzeigen."""
+        self.settings.set_session_playlist_file(path)
+        self.playlist_title.set_full_text(Path(path).stem if path else "")
+
+    def _guess_playlist_file(self, items: list[str]) -> str:
+        """Zuletzt verwendete Playlist mit genau diesen Titeln (oder "").
+
+        Für Sitzungen aus Versionen, die sich den Playlist-Namen noch nicht gemerkt haben.
+        """
+        def normalized(paths) -> set[str]:
+            return {os.path.normcase(os.path.realpath(p)) for p in paths}
+
+        wanted = normalized(items)
+        for candidate in self.settings.recent_playlists():
+            try:
+                found, missing = load_playlist_file(candidate)
+            except (OSError, ValueError):
+                continue
+            if not missing and normalized(found) == wanted:
+                return candidate
+        return ""
+
     def _restore_state(self) -> None:
         self.controller.set_volume(self.settings.volume())
         self.controller.set_speed(self.settings.speed())
         items, index = self.settings.session_playlist()
         existing = [p for p in items if Path(p).is_file()]
+        playlist_file = self.settings.session_playlist_file()
+        if not playlist_file and existing:
+            playlist_file = self._guess_playlist_file(existing)
+        self._set_playlist_file(playlist_file)
         if existing:
             if 0 <= index < len(items) and items[index] in existing:
                 index = existing.index(items[index])
