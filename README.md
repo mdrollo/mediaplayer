@@ -47,13 +47,19 @@ Lautstärke, Tempo und Markierungen.
 | Playlist | Doppelklick oder Eingabetaste startet einen Titel; ▶ und Fettschrift markieren den aktuellen Titel |
 | Hinzufügen | Audiodateien auswählen (Dateien/Ordner können auch ins Fenster gezogen werden) |
 | Entfernen | Markierten Titel aus der Playlist entfernen |
-| Mischen | Reihenfolge einmal zufällig durchmischen. Der aktuelle Titel rückt nach oben und spielt ungestört weiter. Die gemischte Reihenfolge wird nicht gespeichert – beim nächsten Start gilt wieder die ursprüngliche (außer man speichert sie bewusst mit „Playlist speichern“) |
-| Playlist laden / speichern | `.m3u8`/`.m3u` (auch für andere Player) oder `.json` |
+| Mischen | Reihenfolge einmal zufällig durchmischen. Der aktuelle Titel rückt nach oben und spielt ungestört weiter. Die gemischte Reihenfolge wird nicht gespeichert – beim nächsten Start gilt wieder die ursprüngliche (außer man speichert sie bewusst mit „Speichern“) |
+| Laden / Speichern | `.m3u8`/`.m3u` (auch für andere Player) oder `.json` |
 | Zuletzt | Schnellauswahl der 10 zuletzt geladenen oder gespeicherten Playlists (Taste `L`). Antippen + „Laden“, Doppelklick, Eingabetaste oder Ziffern 1–9; nicht mehr vorhandene Playlists erscheinen grau und lassen sich mit „Aus Liste entfernen“ (oder Entf) löschen. `L` schließt das Panel wieder |
 | Tastatur | Tastaturbelegung konfigurieren |
 | Beenden | Programm schließen |
 
 **Escape** verlässt den Vollbildmodus, **F11** schaltet ihn um.
+
+Die Oberfläche ist für 1920×1080 ausgelegt und verkleinert sich auf kleineren
+Bildschirmen automatisch gleichmäßig (z. B. auf 80 % bei Full HD mit 125 %
+Windows-Skalierung), damit nichts abgeschnitten wird. Mit der
+Umgebungsvariable `MEDIAPLAYER_UI_SCALE` (z. B. `0.9`) lässt sich der Faktor
+fest vorgeben.
 
 ### Pausen überspringen
 
@@ -127,7 +133,7 @@ eines Refrains, und springst später direkt dorthin.
 
 ### Dateiauswahl
 
-Hinzufügen, Playlist laden und Playlist speichern verwenden einen eigenen
+Hinzufügen, Laden und Speichern verwenden einen eigenen
 Dateidialog in derselben großen Darstellung wie der Player (im Vollbild
 ebenfalls bildschirmfüllend, per Touch scrollbar):
 

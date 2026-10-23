@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from .style import px
 from .widgets import IS_DIR_ROLE, PATH_ROLE, SUBTITLE_ROLE, BigListWidget, size_dialog
 
 
@@ -98,8 +99,8 @@ class FileBrowserDialog(QDialog):
         self._result: list[str] = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 26, 32, 26)
-        layout.setSpacing(16)
+        layout.setContentsMargins(px(32), px(26), px(32), px(26))
+        layout.setSpacing(px(16))
 
         heading = QLabel(title)
         heading.setObjectName("dialogTitle")
@@ -409,7 +410,7 @@ class FileBrowserDialog(QDialog):
 
     def _button(self, text: str, slot, tooltip: str = "") -> QPushButton:
         button = QPushButton(text)
-        button.setMinimumHeight(64)
+        button.setMinimumHeight(px(64))
         button.setAutoDefault(False)
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         if tooltip:

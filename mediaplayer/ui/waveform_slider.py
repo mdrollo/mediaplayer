@@ -9,6 +9,7 @@ from PySide6.QtCore import QLineF, QRect, Qt
 from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtWidgets import QStyle, QStyleOptionSlider
 
+from .style import px
 from .widgets import MarkerSlider
 
 # Farben: gespielter Teil blau, Rest grau; RMS (Kern) heller als die Spitzen.
@@ -133,7 +134,7 @@ class WaveformSlider(MarkerSlider):
                 painter.setClipping(False)
         else:
             # Schlichter Balken, solange die Wellenform noch nicht bekannt ist.
-            bar = QRect(track.left(), track.center().y() - 8, track.width(), 16)
+            bar = QRect(track.left(), track.center().y() - px(8), track.width(), px(16))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(BAR_BACKGROUND)
             painter.drawRoundedRect(bar, 8, 8)
@@ -142,7 +143,7 @@ class WaveformSlider(MarkerSlider):
                 painter.drawRoundedRect(QRect(bar.left(), bar.top(), playhead_x - bar.left(), bar.height()), 8, 8)
             if self._pending:
                 font = painter.font()
-                font.setPixelSize(18)
+                font.setPixelSize(px(18))
                 painter.setFont(font)
                 painter.setPen(PENDING_TEXT)
                 painter.drawText(

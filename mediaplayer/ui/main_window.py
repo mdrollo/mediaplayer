@@ -47,11 +47,12 @@ from ..settings import key_bindings as kb
 from .file_browser import FileBrowserDialog
 from .key_config_dialog import KeyConfigDialog
 from .recent_playlists_dialog import RecentPlaylistsDialog
-from .style import BUTTON_HEIGHT, ICON_SIZE
+from .style import BUTTON_HEIGHT, ICON_SIZE, TRANSPORT_HEIGHT, px
 from .waveform_slider import WaveformSlider
 from .widgets import ElidedLabel, enable_touch_scrolling
 
 MESSAGE_TIMEOUT_MS = 6000
+PANEL_COLUMNS = 12  # Raster des Bedienfelds
 
 
 def format_speed(speed: float) -> str:
@@ -119,14 +120,14 @@ class MainWindow(QMainWindow):
         central = QWidget(self)
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
-        root.setContentsMargins(36, 28, 36, 28)
-        root.setSpacing(20)
+        root.setContentsMargins(px(32), px(22), px(32), px(22))
+        root.setSpacing(px(16))
 
         # --- Zeit | Playlist-Name | Meldungen + Uhr
         # Drei gleich breite Spalten, damit der Playlist-Name exakt mittig steht,
         # egal wie breit Zeitanzeige, Meldung oder Uhr gerade sind.
         top = QGridLayout()
-        top.setHorizontalSpacing(20)
+        top.setHorizontalSpacing(px(20))
         self.time_label = QLabel("0:00 / 0:00")
         self.time_label.setObjectName("timeLabel")
         self.time_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -138,7 +139,7 @@ class MainWindow(QMainWindow):
         top.addWidget(self.playlist_title, 0, 1)
 
         right = QHBoxLayout()
-        right.setSpacing(30)
+        right.setSpacing(px(30))
         self.message_label = QLabel("")
         self.message_label.setObjectName("messageLabel")
         self.message_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -175,25 +176,36 @@ class MainWindow(QMainWindow):
         self._updating_position = False
         root.addWidget(self.position_slider)
 
-        # --- Darunter zwei Spalten: links die Playlist, rechts das Bedienfeld.
-        #     So bekommt die Liste die volle Höhe statt nur den Rest unter
-        #     mehreren Bedienzeilen in voller Breite.
-        columns = QHBoxLayout()
-        columns.setSpacing(36)
+        # --- Darunter zwei Spalten: links Playlist, rechts Bedienfeld.
+        #     Die Button-Leisten stehen jeweils unter ihrer Spalte, so schließen
+        #     beide Spalten oben und unten bündig ab.
+        columns = QGridLayout()
+        columns.setHorizontalSpacing(px(32))
+        columns.setVerticalSpacing(px(14))
+        columns.setColumnStretch(0, 3)
+        columns.setColumnStretch(1, 2)
+        columns.setRowStretch(0, 1)
         root.addLayout(columns, 1)
 
         self.playlist_view = PlaylistWidget()
         self.playlist_view.playRequested.connect(self.controller.play_index)
-        columns.addWidget(self.playlist_view, 3)
+        columns.addWidget(self.playlist_view, 0, 0)
         self.playlist_view.setFocus()
 
-        panel = QVBoxLayout()
-        panel.setSpacing(12)
-        columns.addLayout(panel, 2)
+        panel_widget = QWidget()
+        panel = QGridLayout(panel_widget)
+        panel.setContentsMargins(0, 0, 0, 0)
+        panel.setHorizontalSpacing(px(12))
+        panel.setVerticalSpacing(px(12))
+        # 12 gleich breite Spalten: Reihen mit 2, 3, 4 oder 6 Buttons teilen
+        # sich dieselben Kanten und stehen sauber untereinander.
+        for column in range(PANEL_COLUMNS):
+            panel.setColumnStretch(column, 1)
+            panel.setColumnMinimumWidth(column, 0)
+        columns.addWidget(panel_widget, 0, 1)
+        row = 0
 
-        # --- Transport
-        transport = QHBoxLayout()
-        transport.setSpacing(16)
+        # --- Wiedergabe
         self.prev_button = self._make_icon_button(
             QStyle.StandardPixmap.SP_MediaSkipBackward, "Vorheriger Titel", self.controller.previous_track
         )
@@ -206,16 +218,16 @@ class MainWindow(QMainWindow):
         self.next_button = self._make_icon_button(
             QStyle.StandardPixmap.SP_MediaSkipForward, "Nächster Titel", self.controller.next_track
         )
-        for button in (self.prev_button, self.play_button, self.stop_button, self.next_button):
-            transport.addWidget(button, 1)
-        panel.addLayout(transport)
+        row = self._add_button_row(
+            panel, row, [self.prev_button, self.play_button, self.stop_button, self.next_button]
+        )
 
-        # --- Lautstärke
+        # --- Lautstärke + Pausen überspringen
         volume_row = QHBoxLayout()
-        volume_row.setSpacing(16)
+        volume_row.setSpacing(px(12))
         volume_icon = QLabel()
         volume_icon.setPixmap(
-            self.style().standardIcon(QStyle.StandardPixmap.SP_MediaVolume).pixmap(40, 40)
+            self.style().standardIcon(QStyle.StandardPixmap.SP_MediaVolume).pixmap(px(36), px(36))
         )
         volume_icon.setToolTip("Lautstärke")
         volume_row.addWidget(volume_icon)
@@ -229,36 +241,30 @@ class MainWindow(QMainWindow):
         volume_row.addWidget(self.volume_slider, 1)
         self.volume_label = QLabel("80 %")
         self.volume_label.setObjectName("volumeLabel")
+        self.volume_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         volume_row.addWidget(self.volume_label)
+        panel.addLayout(volume_row, row, 0, 1, 6)
         self.skip_button = self._make_text_button(
-            "Pausen\nüberspringen", "Stille am Anfang und Ende der Titel überspringen", lambda: None
+            "Pausen überspringen", "Stille am Anfang und Ende der Titel überspringen", lambda: None
         )
         self.skip_button.setCheckable(True)
         self.skip_button.setChecked(self.settings.skip_silence())
-        self.skip_button.setObjectName("skipButton")
         self.skip_button.toggled.connect(self._on_skip_toggled)
-        volume_row.addWidget(self.skip_button)
-        panel.addLayout(volume_row)
+        self._fill_width(self.skip_button)
+        panel.addWidget(self.skip_button, row, 6, 1, 6)
+        row += 1
 
-        # --- Geschwindigkeit
-        panel.addSpacing(10)
-        speed_head = QHBoxLayout()
-        speed_title = QLabel("Tempo")
-        speed_title.setObjectName("sectionLabel")
-        speed_head.addWidget(speed_title)
-        speed_head.addStretch(1)
-        self.speed_label = QLabel()
-        self.speed_label.setObjectName("speedLabel")
-        self.speed_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.speed_label.setTextFormat(Qt.TextFormat.RichText)
-        speed_head.addWidget(self.speed_label)
-        panel.addLayout(speed_head)
-
-        speed_row = QHBoxLayout()
-        speed_row.setSpacing(16)
+        # --- Tempo
+        row = self._add_section_head(panel, row, "Tempo", self._make_speed_label())
         # Die Tempo-Zeile wird mit dem TempoController verbunden, siehe _connect_tempo().
         slower = self._make_text_button("−", "Langsamer (1 BPM bzw. 0,01x)", lambda: self.tempo.step(-1))
-        speed_row.addWidget(slower)
+        faster = self._make_text_button("+", "Schneller (1 BPM bzw. 0,01x)", lambda: self.tempo.step(1))
+        # Kurz tippen = ein Schritt; gedrückt halten = läuft schnell weiter.
+        for button in (slower, faster):
+            button.setAutoRepeat(True)
+            button.setAutoRepeatDelay(400)
+            button.setAutoRepeatInterval(50)
+            self._fill_width(button)
         # Regler arbeitet in ganzen BPM, wenn das Tempo bekannt ist, sonst in 0,01x-Schritten.
         self.speed_slider = QSlider(Qt.Orientation.Horizontal)
         self.speed_slider.setSingleStep(1)
@@ -266,95 +272,111 @@ class MainWindow(QMainWindow):
         self.speed_slider.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.speed_slider.valueChanged.connect(self._on_speed_slider)
         self._slider_in_bpm = False
-        speed_row.addWidget(self.speed_slider, 1)
-        faster = self._make_text_button("+", "Schneller (1 BPM bzw. 0,01x)", lambda: self.tempo.step(1))
-        speed_row.addWidget(faster)
-        # Kurz tippen = ein Schritt; gedrückt halten = läuft schnell weiter.
-        for button in (slower, faster):
-            button.setAutoRepeat(True)
-            button.setAutoRepeatDelay(400)
-            button.setAutoRepeatInterval(50)
-        panel.addLayout(speed_row)
+        panel.addWidget(slower, row, 0, 1, 2)
+        panel.addWidget(self.speed_slider, row, 2, 1, 8)
+        panel.addWidget(faster, row, 10, 1, 2)
+        row += 1
 
-        tempo_buttons = QHBoxLayout()
-        tempo_buttons.setSpacing(16)
-        tempo_buttons.addWidget(self._make_text_button("1,00x", "Originaltempo", lambda: self.tempo.reset()))
+        reset = self._make_text_button("1,00x", "Originaltempo", lambda: self.tempo.reset())
         self.tap_button = self._make_text_button(
             "Tap", "Im Takt mehrmals antippen, um das Tempo selbst festzulegen", lambda: self.tempo.tap()
         )
-        tempo_buttons.addWidget(self.tap_button)
         self.half_button = self._make_text_button("½", "Erkanntes Tempo halbieren", lambda: self.tempo.halve())
-        tempo_buttons.addWidget(self.half_button)
         self.double_button = self._make_text_button("×2", "Erkanntes Tempo verdoppeln", lambda: self.tempo.double())
-        tempo_buttons.addWidget(self.double_button)
         self.lock_button = self._make_text_button(
             "BPM fest", "Alle Titel mit denselben BPM abspielen", lambda: None
         )
         self.lock_button.setCheckable(True)
         self.lock_button.toggled.connect(lambda on: self.tempo.set_locked(on))
-        tempo_buttons.addWidget(self.lock_button, 1)
-        panel.addLayout(tempo_buttons)
+        # 1,00x | Tap | ½ | ×2 je 2 Spalten, "BPM fest" 4 Spalten (längster Text).
+        row = self._add_button_row(
+            panel, row, [reset, self.tap_button, self.half_button, self.double_button, self.lock_button],
+            spans=[2, 2, 2, 2, 4],
+        )
 
         # --- Markierungen (Sprungmarken im aktuellen Titel)
-        panel.addSpacing(10)
-        marker_head = QHBoxLayout()
-        marker_title = QLabel("Markierungen")
-        marker_title.setObjectName("sectionLabel")
-        marker_head.addWidget(marker_title)
-        marker_head.addStretch(1)
         self.marker_count_label = QLabel()
         self.marker_count_label.setObjectName("sectionLabel")
-        marker_head.addWidget(self.marker_count_label)
-        panel.addLayout(marker_head)
-
-        marker_jump = QHBoxLayout()
-        marker_jump.setSpacing(16)
-        marker_jump.addWidget(self._make_text_button(
+        row = self._add_section_head(panel, row, "Markierungen", self.marker_count_label)
+        set_button = self._make_text_button(
             "Setzen", "Markierung an der gerade gespielten Stelle setzen", self.markers.add_at_current
-        ), 2)
+        )
         self.marker_prev_button = self._make_text_button(
             "◀", "Zur vorherigen Markierung springen", self.markers.jump_previous
         )
-        marker_jump.addWidget(self.marker_prev_button, 1)
         self.marker_next_button = self._make_text_button(
             "▶", "Zur nächsten Markierung springen", self.markers.jump_next
         )
-        marker_jump.addWidget(self.marker_next_button, 1)
-        panel.addLayout(marker_jump)
-
-        marker_delete = QHBoxLayout()
-        marker_delete.setSpacing(16)
+        row = self._add_button_row(panel, row, [set_button, self.marker_prev_button, self.marker_next_button])
         self.marker_delete_button = self._make_text_button(
             "Löschen", "Die Markierung löschen, die der aktuellen Stelle am nächsten ist",
             self.markers.delete_nearest,
         )
-        marker_delete.addWidget(self.marker_delete_button, 1)
         self.marker_clear_button = self._make_text_button(
             "Alle löschen", "Alle Markierungen dieses Titels löschen", self.clear_markers
         )
-        marker_delete.addWidget(self.marker_clear_button, 1)
-        panel.addLayout(marker_delete)
-        panel.addStretch(1)
+        row = self._add_button_row(panel, row, [self.marker_delete_button, self.marker_clear_button])
+        panel.setRowStretch(row, 1)  # restlicher Platz unterhalb des Bedienfelds
 
-        # --- Untere Leiste
-        bottom = QHBoxLayout()
-        bottom.setSpacing(14)
-        bottom.addWidget(self._make_text_button("Hinzufügen", "Audiodateien hinzufügen", self.add_files))
-        bottom.addWidget(self._make_text_button("Entfernen", "Markierten Titel entfernen", self.remove_selected))
-        bottom.addWidget(self._make_text_button(
-            "Mischen", "Reihenfolge einmal zufällig mischen (wird nicht gespeichert)", self.shuffle_playlist
-        ))
-        bottom.addWidget(self._make_text_button("Playlist laden", "Playlist-Datei laden", self.load_playlist))
-        bottom.addWidget(self._make_text_button(
-            "Zuletzt", "Zuletzt verwendete Playlists (Schnellauswahl)", self.show_recent_playlists
-        ))
-        bottom.addWidget(self._make_text_button("Playlist speichern", "Playlist-Datei speichern", self.save_playlist))
-        bottom.addStretch(1)
-        bottom.addWidget(self._make_text_button("Tastatur", "Tastaturbelegung konfigurieren", self.configure_keys))
+        # --- Untere Leisten: Playlist-Aktionen unter der Liste, Programm unter dem Bedienfeld
+        playlist_bar = QHBoxLayout()
+        playlist_bar.setSpacing(px(12))
+        for text, tooltip, slot in (
+            ("Hinzufügen", "Audiodateien hinzufügen", self.add_files),
+            ("Entfernen", "Markierten Titel entfernen", self.remove_selected),
+            ("Mischen", "Reihenfolge einmal zufällig mischen (wird nicht gespeichert)", self.shuffle_playlist),
+            ("Laden", "Playlist-Datei laden", self.load_playlist),
+            ("Zuletzt", "Zuletzt verwendete Playlists (Schnellauswahl)", self.show_recent_playlists),
+            ("Speichern", "Playlist-Datei speichern", self.save_playlist),
+        ):
+            button = self._make_text_button(text, tooltip, slot)
+            self._fill_width(button)
+            playlist_bar.addWidget(button, 1)
+        columns.addLayout(playlist_bar, 1, 0)
+
+        app_bar = QGridLayout()
+        app_bar.setHorizontalSpacing(px(12))
+        for column in range(PANEL_COLUMNS):
+            app_bar.setColumnStretch(column, 1)
+        keys_button = self._make_text_button("Tastatur", "Tastaturbelegung konfigurieren", self.configure_keys)
         quit_button = self._make_text_button("Beenden", "Programm beenden", self.close)
         quit_button.setObjectName("quitButton")
-        bottom.addWidget(quit_button)
-        root.addLayout(bottom)
+        self._add_button_row(app_bar, 0, [keys_button, quit_button])
+        columns.addLayout(app_bar, 1, 1)
+
+    def _make_speed_label(self) -> QLabel:
+        self.speed_label = QLabel()
+        self.speed_label.setObjectName("speedLabel")
+        self.speed_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.speed_label.setTextFormat(Qt.TextFormat.RichText)
+        return self.speed_label
+
+    @staticmethod
+    def _fill_width(widget: QWidget) -> None:
+        """Breite vom Raster bestimmen lassen (gleich breite Buttons je Reihe)."""
+        widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+
+    def _add_button_row(self, grid: QGridLayout, row: int, buttons: list, spans: list | None = None) -> int:
+        """Buttons gleichmäßig über die 12 Rasterspalten verteilen; gibt die nächste Zeile zurück."""
+        spans = spans or [PANEL_COLUMNS // len(buttons)] * len(buttons)
+        column = 0
+        for button, span in zip(buttons, spans):
+            self._fill_width(button)
+            grid.addWidget(button, row, column, 1, span)
+            column += span
+        return row + 1
+
+    def _add_section_head(self, grid: QGridLayout, row: int, title: str, right_widget: QWidget) -> int:
+        head = QHBoxLayout()
+        head.setContentsMargins(0, px(8), 0, 0)
+        label = QLabel(title)
+        label.setObjectName("sectionLabel")
+        head.addWidget(label)
+        head.addStretch(1)
+        right_widget.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        head.addWidget(right_widget)
+        grid.addLayout(head, row, 0, 1, PANEL_COLUMNS)
+        return row + 1
 
     def _on_skip_toggled(self, enabled: bool) -> None:
         self.controller.set_skip_silence(enabled)
@@ -368,8 +390,8 @@ class MainWindow(QMainWindow):
         button = QPushButton()
         button.setObjectName("transportButton")
         button.setIcon(self.style().standardIcon(pixmap))
-        button.setIconSize(QSize(ICON_SIZE, ICON_SIZE))
-        button.setMinimumHeight(BUTTON_HEIGHT)
+        button.setIconSize(QSize(px(ICON_SIZE), px(ICON_SIZE)))
+        button.setFixedHeight(px(TRANSPORT_HEIGHT))
         button.setToolTip(tooltip)
         button.setAccessibleName(tooltip)
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -378,7 +400,7 @@ class MainWindow(QMainWindow):
 
     def _make_text_button(self, text: str, tooltip: str, slot) -> QPushButton:
         button = QPushButton(text)
-        button.setMinimumHeight(64)
+        button.setFixedHeight(px(BUTTON_HEIGHT))
         button.setToolTip(tooltip)
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         button.clicked.connect(slot)
@@ -515,8 +537,8 @@ class MainWindow(QMainWindow):
                 detail = ""
         slider.blockSignals(False)
         self.speed_label.setText(
-            f"<div style='font-size:30px; font-weight:bold'>{main}</div>"
-            f"<div style='font-size:18px; color:#b8bcc4'>{detail}</div>"
+            f"<div style='font-size:{px(30)}px; font-weight:bold'>{main}</div>"
+            f"<div style='font-size:{px(18)}px; color:#b8bcc4'>{detail}</div>"
         )
         self.half_button.setEnabled(original > 0)
         self.double_button.setEnabled(original > 0)

@@ -26,6 +26,8 @@ from ..settings.key_bindings import (
     display_key,
     key_from_event,
 )
+from .style import px
+from .widgets import size_dialog
 
 
 class KeyCaptureButton(QPushButton):
@@ -41,7 +43,7 @@ class KeyCaptureButton(QPushButton):
         super().__init__(parent)
         self._capturing = False
         self._key = ""
-        self.setMinimumWidth(210)
+        self.setMinimumWidth(px(210))
         self.setToolTip("Klicken und dann die neue Taste drücken")
         self.clicked.connect(self.start_capture)
         self._show_key()
@@ -94,14 +96,14 @@ class KeyConfigDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Tastaturbelegung")
         self.setModal(True)
-        self.resize(1300, 920)
+        size_dialog(self, parent, 0.9, fullscreen_like_parent=False)
         self._bindings = copy_bindings(bindings)
         # _buttons[action][slot] -> KeyCaptureButton
         self._buttons: dict[str, list[KeyCaptureButton]] = {}
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(28, 24, 28, 24)
-        layout.setSpacing(16)
+        layout.setContentsMargins(px(28), px(24), px(28), px(24))
+        layout.setSpacing(px(16))
 
         intro = QLabel(
             "Jede Funktion kann zwei Tasten haben. Auf eine Taste klicken und "
@@ -174,7 +176,7 @@ class KeyConfigDialog(QDialog):
 
         clear = QPushButton("✕", container)
         clear.setToolTip("Belegung entfernen")
-        clear.setFixedWidth(60)
+        clear.setFixedWidth(px(60))
         clear.setAutoDefault(False)
         clear.clicked.connect(lambda _=False, a=action, s=slot: self._clear(a, s))
         row_layout.addWidget(clear)

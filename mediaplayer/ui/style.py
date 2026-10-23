@@ -1,10 +1,63 @@
-"""Gemeinsames Erscheinungsbild: große Schrift, große Bedienelemente."""
+"""Gemeinsames Erscheinungsbild: große Schrift, große Bedienelemente.
+
+Alle Größen sind für einen Bildschirm mit 1920×1080 Punkten ausgelegt. Auf
+kleineren Bildschirmen – auch 1920×1080 mit 125 % Windows-Skalierung, was für
+Programme nur 1536×864 Punkte ergibt – wird die gesamte Oberfläche gleichmäßig
+verkleinert, damit nichts abgeschnitten wird: ``set_ui_scale`` beim Start,
+danach liefern ``px()`` und ``scaled_stylesheet()`` die passenden Werte.
+"""
+
+import os
+import re
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QProxyStyle, QStyle, QStyleFactory
 
+# Bezugsgröße der Gestaltung: Full HD abzüglich einer üblichen Taskleiste.
+DESIGN_WIDTH = 1920
+DESIGN_HEIGHT = 1032
+MIN_SCALE = 0.6
+
 ICON_SIZE = 56
-BUTTON_HEIGHT = 84
+BUTTON_HEIGHT = 64          # einheitliche Höhe aller Text-Buttons
+TRANSPORT_HEIGHT = 84       # Wiedergabe-Buttons etwas größer
+
+_scale = 1.0
+
+
+def scale_for_screen(available_width: int, available_height: int) -> float:
+    """Verkleinerungsfaktor für einen Bildschirm (nie größer als 1).
+
+    Mit der Umgebungsvariable MEDIAPLAYER_UI_SCALE (z. B. 0.9) lässt sich der
+    Wert fest vorgeben.
+    """
+    override = os.environ.get("MEDIAPLAYER_UI_SCALE")
+    if override:
+        try:
+            return max(MIN_SCALE, min(2.0, float(override)))
+        except ValueError:
+            pass
+    fit = min(available_width / DESIGN_WIDTH, available_height / DESIGN_HEIGHT, 1.0)
+    return max(MIN_SCALE, round(fit, 3))
+
+
+def set_ui_scale(scale: float) -> None:
+    global _scale
+    _scale = scale
+
+
+def ui_scale() -> float:
+    return _scale
+
+
+def px(value: float) -> int:
+    """Pixelwert der Gestaltung (bei 1920×1080) auf den aktuellen Bildschirm umrechnen."""
+    return max(1, round(value * _scale))
+
+
+def scaled_stylesheet() -> str:
+    """STYLESHEET mit allen px-Angaben auf den aktuellen Bildschirm umgerechnet."""
+    return re.sub(r"(\d+)px", lambda m: f"{px(int(m.group(1)))}px", STYLESHEET)
 
 
 class PlayerStyle(QProxyStyle):
@@ -47,9 +100,13 @@ QLabel#clockLabel {
     font-weight: bold;
     color: #b8bcc4;
 }
-QLabel#speedLabel, QLabel#volumeLabel {
+QLabel#speedLabel {
     font-size: 28px;
     min-width: 120px;
+}
+QLabel#volumeLabel {
+    font-size: 24px;
+    min-width: 72px;   /* passt genau für "100 %" */
 }
 QLabel#messageLabel {
     font-size: 22px;
@@ -98,8 +155,8 @@ QLabel#sectionLabel {
     color: #b8bcc4;
 }
 QPushButton {
-    font-size: 26px;
-    padding: 10px 22px;
+    font-size: 24px;
+    padding: 8px 14px;
     border: 2px solid #4a4d55;
     border-radius: 10px;
     background-color: #2b2d33;
@@ -112,10 +169,6 @@ QPushButton:pressed {
 }
 QPushButton#transportButton {
     min-width: 120px;
-}
-QPushButton#skipButton {
-    font-size: 20px;
-    padding: 6px 16px;
 }
 QPushButton#quitButton {
     border-color: #a5463f;

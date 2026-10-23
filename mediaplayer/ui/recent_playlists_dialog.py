@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..settings.key_bindings import key_from_event
+from .style import px
 from .widgets import DIMMED_ROLE, PATH_ROLE, SUBTITLE_ROLE, BigListWidget, size_dialog
 
 
@@ -35,8 +36,8 @@ class RecentPlaylistsDialog(QDialog):
         self._chosen = ""
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 26, 32, 26)
-        layout.setSpacing(16)
+        layout.setContentsMargins(px(32), px(26), px(32), px(26))
+        layout.setSpacing(px(16))
 
         heading = QLabel("Zuletzt verwendete Playlists")
         heading.setObjectName("dialogTitle")
@@ -144,7 +145,7 @@ class RecentPlaylistsDialog(QDialog):
 
     def _button(self, text: str, slot) -> QPushButton:
         button = QPushButton(text)
-        button.setMinimumHeight(64)
+        button.setMinimumHeight(px(64))
         button.setAutoDefault(False)
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         button.clicked.connect(lambda _=False: slot())

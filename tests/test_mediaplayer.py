@@ -721,6 +721,40 @@ class PlaylistTitleMigrationTests(unittest.TestCase):
         slider.deleteLater()
 
 
+class ScreenFitTests(unittest.TestCase):
+    """Die Oberfläche muss auch auf kleineren Bildschirmen vollständig passen."""
+
+    def test_scale_for_screen(self):
+        from mediaplayer.ui.style import scale_for_screen
+
+        self.assertEqual(scale_for_screen(1920, 1032), 1.0)
+        self.assertEqual(scale_for_screen(2560, 1400), 1.0)            # nie vergrößern
+        self.assertAlmostEqual(scale_for_screen(1536, 816), 0.79, delta=0.01)  # Full HD bei 125 %
+        self.assertEqual(scale_for_screen(800, 480), 0.6)              # Untergrenze
+
+    def test_main_window_fits_full_hd_at_125_percent(self):
+        from mediaplayer.ui import style
+        from mediaplayer.ui.main_window import MainWindow
+
+        available_w, available_h = 1536, 816 - 31  # Arbeitsbereich minus Fenstertitel
+        style.set_ui_scale(style.scale_for_screen(1536, 816))
+        app.setStyleSheet(style.scaled_stylesheet())
+        try:
+            with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+                settings = AppSettings(QSettings(str(Path(tmp) / "s.ini"), QSettings.Format.IniFormat))
+                w = MainWindow(settings)
+                hint = w.minimumSizeHint()
+                self.assertLessEqual(hint.width(), available_w)
+                self.assertLessEqual(hint.height(), available_h)
+                w.analysis.shutdown()
+                w.close()
+                w.deleteLater()
+                wait(50)
+        finally:
+            style.set_ui_scale(1.0)
+            app.setStyleSheet(style.STYLESHEET)
+
+
 class TempoTests(unittest.TestCase):
     """BPM-Steuerung mit vorbefülltem Cache (ohne Dekodierung)."""
 

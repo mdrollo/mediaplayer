@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .style import px
+
 # Zusätzliche Datenrollen für TwoLineDelegate.
 SUBTITLE_ROLE = Qt.ItemDataRole.UserRole + 1
 BOLD_ROLE = Qt.ItemDataRole.UserRole + 2
@@ -51,10 +53,10 @@ class TwoLineDelegate(QStyledItemDelegate):
 
     def __init__(self, parent=None, title_px: int = 30, subtitle_px: int = 20, icon_px: int = 44):
         super().__init__(parent)
-        self.title_px = title_px
-        self.subtitle_px = subtitle_px
-        self.icon_px = icon_px
-        self.padding = 14
+        self.title_px = px(title_px)
+        self.subtitle_px = px(subtitle_px)
+        self.icon_px = px(icon_px)
+        self.padding = px(14)
 
     def _fonts(self, option: QStyleOptionViewItem, bold: bool) -> tuple[QFont, QFont]:
         title = QFont(option.font)
@@ -158,7 +160,7 @@ class MarkerSlider(QSlider):
             return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(QPen(_MARKER, 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.setPen(QPen(_MARKER, px(4), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         top, bottom = 4, self.height() - 4
         for value in self._markers:
             if self.minimum() <= value <= self.maximum():

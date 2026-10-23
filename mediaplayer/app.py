@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QApplication
 
 from . import APP_NAME, ORGANIZATION_NAME
 from .ui.main_window import MainWindow
-from .ui.style import STYLESHEET, PlayerStyle
+from .ui.style import PlayerStyle, scale_for_screen, scaled_stylesheet, set_ui_scale
 
 
 def asset_path(name: str) -> Path:
@@ -29,7 +29,10 @@ def run() -> int:
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(ORGANIZATION_NAME)
     app.setStyle(PlayerStyle())
-    app.setStyleSheet(STYLESHEET)
+    # Oberfläche an den verfügbaren Platz anpassen (z. B. 1536×864 bei 125 % Skalierung).
+    available = app.primaryScreen().availableGeometry()
+    set_ui_scale(scale_for_screen(available.width(), available.height()))
+    app.setStyleSheet(scaled_stylesheet())
     icon = asset_path("icon.png")
     if icon.is_file():
         app.setWindowIcon(QIcon(str(icon)))
