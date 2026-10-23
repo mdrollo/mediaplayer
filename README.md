@@ -32,6 +32,10 @@ stattdessen als maximiertes Fenster.
 
 ## Bedienung
 
+Unter Kopfzeile und Positionsregler ist das Fenster zweigeteilt: links die
+Playlist über die volle Höhe, rechts das Bedienfeld mit Wiedergabe,
+Lautstärke, Tempo und Markierungen.
+
 | Element | Funktion |
 |---|---|
 | Kopfzeile | Links Zeit, mittig der Name der aktuellen Playlist (zuletzt geladene/gespeicherte Datei, ohne Pfad und Endung), rechts Uhrzeit |

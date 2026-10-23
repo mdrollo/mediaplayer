@@ -175,7 +175,23 @@ class MainWindow(QMainWindow):
         self._updating_position = False
         root.addWidget(self.position_slider)
 
-        # --- Transport + Lautstärke
+        # --- Darunter zwei Spalten: links die Playlist, rechts das Bedienfeld.
+        #     So bekommt die Liste die volle Höhe statt nur den Rest unter
+        #     mehreren Bedienzeilen in voller Breite.
+        columns = QHBoxLayout()
+        columns.setSpacing(36)
+        root.addLayout(columns, 1)
+
+        self.playlist_view = PlaylistWidget()
+        self.playlist_view.playRequested.connect(self.controller.play_index)
+        columns.addWidget(self.playlist_view, 3)
+        self.playlist_view.setFocus()
+
+        panel = QVBoxLayout()
+        panel.setSpacing(12)
+        columns.addLayout(panel, 2)
+
+        # --- Transport
         transport = QHBoxLayout()
         transport.setSpacing(16)
         self.prev_button = self._make_icon_button(
@@ -191,25 +207,18 @@ class MainWindow(QMainWindow):
             QStyle.StandardPixmap.SP_MediaSkipForward, "Nächster Titel", self.controller.next_track
         )
         for button in (self.prev_button, self.play_button, self.stop_button, self.next_button):
-            transport.addWidget(button)
-        transport.addSpacing(16)
-        self.skip_button = self._make_text_button(
-            "Pausen\nüberspringen", "Stille am Anfang und Ende der Titel überspringen", lambda: None
-        )
-        self.skip_button.setCheckable(True)
-        self.skip_button.setChecked(self.settings.skip_silence())
-        self.skip_button.setMinimumHeight(BUTTON_HEIGHT)
-        self.skip_button.setObjectName("skipButton")
-        self.skip_button.toggled.connect(self._on_skip_toggled)
-        transport.addWidget(self.skip_button)
-        transport.addSpacing(30)
+            transport.addWidget(button, 1)
+        panel.addLayout(transport)
 
+        # --- Lautstärke
+        volume_row = QHBoxLayout()
+        volume_row.setSpacing(16)
         volume_icon = QLabel()
         volume_icon.setPixmap(
             self.style().standardIcon(QStyle.StandardPixmap.SP_MediaVolume).pixmap(40, 40)
         )
         volume_icon.setToolTip("Lautstärke")
-        transport.addWidget(volume_icon)
+        volume_row.addWidget(volume_icon)
         self.volume_slider = QSlider(Qt.Orientation.Horizontal)
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setPageStep(VOLUME_STEP * 2)
@@ -217,50 +226,36 @@ class MainWindow(QMainWindow):
         self.volume_slider.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.volume_slider.setToolTip("Lautstärke")
         self.volume_slider.valueChanged.connect(self.controller.set_volume)
-        transport.addWidget(self.volume_slider, 1)
+        volume_row.addWidget(self.volume_slider, 1)
         self.volume_label = QLabel("80 %")
         self.volume_label.setObjectName("volumeLabel")
-        transport.addWidget(self.volume_label)
-        root.addLayout(transport)
-
-        # --- Markierungen (Sprungmarken im aktuellen Titel)
-        marker_row = QHBoxLayout()
-        marker_row.setSpacing(16)
-        marker_title = QLabel("Markierungen")
-        marker_title.setObjectName("sectionLabel")
-        marker_row.addWidget(marker_title)
-        marker_row.addWidget(self._make_text_button(
-            "Setzen", "Markierung an der gerade gespielten Stelle setzen", self.markers.add_at_current
-        ))
-        self.marker_prev_button = self._make_text_button(
-            "◀", "Zur vorherigen Markierung springen", self.markers.jump_previous
+        volume_row.addWidget(self.volume_label)
+        self.skip_button = self._make_text_button(
+            "Pausen\nüberspringen", "Stille am Anfang und Ende der Titel überspringen", lambda: None
         )
-        marker_row.addWidget(self.marker_prev_button)
-        self.marker_next_button = self._make_text_button(
-            "▶", "Zur nächsten Markierung springen", self.markers.jump_next
-        )
-        marker_row.addWidget(self.marker_next_button)
-        self.marker_delete_button = self._make_text_button(
-            "Löschen", "Die Markierung löschen, die der aktuellen Stelle am nächsten ist",
-            self.markers.delete_nearest,
-        )
-        marker_row.addWidget(self.marker_delete_button)
-        self.marker_clear_button = self._make_text_button(
-            "Alle löschen", "Alle Markierungen dieses Titels löschen", self.clear_markers
-        )
-        marker_row.addWidget(self.marker_clear_button)
-        self.marker_count_label = QLabel()
-        self.marker_count_label.setObjectName("sectionLabel")
-        marker_row.addWidget(self.marker_count_label)
-        marker_row.addStretch(1)
-        root.addLayout(marker_row)
+        self.skip_button.setCheckable(True)
+        self.skip_button.setChecked(self.settings.skip_silence())
+        self.skip_button.setObjectName("skipButton")
+        self.skip_button.toggled.connect(self._on_skip_toggled)
+        volume_row.addWidget(self.skip_button)
+        panel.addLayout(volume_row)
 
         # --- Geschwindigkeit
-        speed_row = QHBoxLayout()
-        speed_row.setSpacing(16)
+        panel.addSpacing(10)
+        speed_head = QHBoxLayout()
         speed_title = QLabel("Tempo")
         speed_title.setObjectName("sectionLabel")
-        speed_row.addWidget(speed_title)
+        speed_head.addWidget(speed_title)
+        speed_head.addStretch(1)
+        self.speed_label = QLabel()
+        self.speed_label.setObjectName("speedLabel")
+        self.speed_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.speed_label.setTextFormat(Qt.TextFormat.RichText)
+        speed_head.addWidget(self.speed_label)
+        panel.addLayout(speed_head)
+
+        speed_row = QHBoxLayout()
+        speed_row.setSpacing(16)
         # Die Tempo-Zeile wird mit dem TempoController verbunden, siehe _connect_tempo().
         slower = self._make_text_button("−", "Langsamer (1 BPM bzw. 0,01x)", lambda: self.tempo.step(-1))
         speed_row.addWidget(slower)
@@ -279,34 +274,67 @@ class MainWindow(QMainWindow):
             button.setAutoRepeat(True)
             button.setAutoRepeatDelay(400)
             button.setAutoRepeatInterval(50)
-        self.speed_label = QLabel()
-        self.speed_label.setObjectName("speedLabel")
-        self.speed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.speed_label.setTextFormat(Qt.TextFormat.RichText)
-        self.speed_label.setMinimumWidth(260)
-        speed_row.addWidget(self.speed_label)
-        speed_row.addWidget(self._make_text_button("1,00x", "Originaltempo", lambda: self.tempo.reset()))
+        panel.addLayout(speed_row)
+
+        tempo_buttons = QHBoxLayout()
+        tempo_buttons.setSpacing(16)
+        tempo_buttons.addWidget(self._make_text_button("1,00x", "Originaltempo", lambda: self.tempo.reset()))
         self.tap_button = self._make_text_button(
             "Tap", "Im Takt mehrmals antippen, um das Tempo selbst festzulegen", lambda: self.tempo.tap()
         )
-        speed_row.addWidget(self.tap_button)
+        tempo_buttons.addWidget(self.tap_button)
         self.half_button = self._make_text_button("½", "Erkanntes Tempo halbieren", lambda: self.tempo.halve())
-        speed_row.addWidget(self.half_button)
+        tempo_buttons.addWidget(self.half_button)
         self.double_button = self._make_text_button("×2", "Erkanntes Tempo verdoppeln", lambda: self.tempo.double())
-        speed_row.addWidget(self.double_button)
+        tempo_buttons.addWidget(self.double_button)
         self.lock_button = self._make_text_button(
             "BPM fest", "Alle Titel mit denselben BPM abspielen", lambda: None
         )
         self.lock_button.setCheckable(True)
         self.lock_button.toggled.connect(lambda on: self.tempo.set_locked(on))
-        speed_row.addWidget(self.lock_button)
-        root.addLayout(speed_row)
+        tempo_buttons.addWidget(self.lock_button, 1)
+        panel.addLayout(tempo_buttons)
 
-        # --- Playlist
-        self.playlist_view = PlaylistWidget()
-        self.playlist_view.playRequested.connect(self.controller.play_index)
-        root.addWidget(self.playlist_view, 1)
-        self.playlist_view.setFocus()
+        # --- Markierungen (Sprungmarken im aktuellen Titel)
+        panel.addSpacing(10)
+        marker_head = QHBoxLayout()
+        marker_title = QLabel("Markierungen")
+        marker_title.setObjectName("sectionLabel")
+        marker_head.addWidget(marker_title)
+        marker_head.addStretch(1)
+        self.marker_count_label = QLabel()
+        self.marker_count_label.setObjectName("sectionLabel")
+        marker_head.addWidget(self.marker_count_label)
+        panel.addLayout(marker_head)
+
+        marker_jump = QHBoxLayout()
+        marker_jump.setSpacing(16)
+        marker_jump.addWidget(self._make_text_button(
+            "Setzen", "Markierung an der gerade gespielten Stelle setzen", self.markers.add_at_current
+        ), 2)
+        self.marker_prev_button = self._make_text_button(
+            "◀", "Zur vorherigen Markierung springen", self.markers.jump_previous
+        )
+        marker_jump.addWidget(self.marker_prev_button, 1)
+        self.marker_next_button = self._make_text_button(
+            "▶", "Zur nächsten Markierung springen", self.markers.jump_next
+        )
+        marker_jump.addWidget(self.marker_next_button, 1)
+        panel.addLayout(marker_jump)
+
+        marker_delete = QHBoxLayout()
+        marker_delete.setSpacing(16)
+        self.marker_delete_button = self._make_text_button(
+            "Löschen", "Die Markierung löschen, die der aktuellen Stelle am nächsten ist",
+            self.markers.delete_nearest,
+        )
+        marker_delete.addWidget(self.marker_delete_button, 1)
+        self.marker_clear_button = self._make_text_button(
+            "Alle löschen", "Alle Markierungen dieses Titels löschen", self.clear_markers
+        )
+        marker_delete.addWidget(self.marker_clear_button, 1)
+        panel.addLayout(marker_delete)
+        panel.addStretch(1)
 
         # --- Untere Leiste
         bottom = QHBoxLayout()
