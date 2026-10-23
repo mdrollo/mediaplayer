@@ -1,4 +1,4 @@
-"""Dauerhafte Einstellungen (Tastenbelegung, Lautstärke, Geschwindigkeit, Sitzung).
+"""Dauerhafte Einstellungen (Tastenbelegung, Lautstärke, Geschwindigkeit, Sitzung, Markierungen).
 
 Gespeichert wird über ``QSettings`` im INI-Format im Benutzerprofil:
 
@@ -29,6 +29,7 @@ class AppSettings:
             APP_NAME,
         )
         self._bpm_cache: dict | None = None
+        self._markers: dict | None = None
 
     @property
     def file_name(self) -> str:
@@ -221,6 +222,57 @@ class AppSettings:
             os.replace(tmp, self._bpm_cache_file)
         except OSError:
             pass  # Cache ist nur eine Beschleunigung
+
+    # -------------------------------------------------------- Markierungen
+    # Eigene JSON-Datei neben der INI: {Dateipfad: [Position in ms, …]}.
+    # Anders als der BPM-Cache ohne Größe/Änderungsdatum im Schlüssel, damit
+    # Markierungen z. B. das Bearbeiten der Titel-Tags überstehen.
+    @property
+    def _markers_file(self) -> str:
+        return os.path.join(os.path.dirname(self.file_name), "markers.json")
+
+    def _load_markers(self) -> dict:
+        if self._markers is None:
+            try:
+                with open(self._markers_file, encoding="utf-8") as f:
+                    data = json.load(f)
+                self._markers = data if isinstance(data, dict) else {}
+            except (OSError, ValueError):
+                self._markers = {}
+        return self._markers
+
+    @staticmethod
+    def _marker_key(path: str) -> str:
+        return os.path.normcase(os.path.realpath(path))
+
+    def markers(self, path: str) -> list[int]:
+        """Gespeicherte Markierungen eines Titels in ms, aufsteigend sortiert."""
+        raw = self._load_markers().get(self._marker_key(path), [])
+        if not isinstance(raw, list):
+            return []
+        result = set()
+        for value in raw:
+            try:
+                result.add(max(0, int(value)))
+            except (TypeError, ValueError):
+                continue
+        return sorted(result)
+
+    def set_markers(self, path: str, positions: list[int]) -> None:
+        data = self._load_markers()
+        key = self._marker_key(path)
+        if positions:
+            data[key] = sorted({int(p) for p in positions})
+        else:
+            data.pop(key, None)
+        try:
+            os.makedirs(os.path.dirname(self._markers_file), exist_ok=True)
+            tmp = self._markers_file + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+            os.replace(tmp, self._markers_file)
+        except OSError:
+            pass
 
     # ------------------------------------------------------ Dateidialoge
     def last_directory(self) -> str:

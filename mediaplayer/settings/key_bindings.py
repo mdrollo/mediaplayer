@@ -23,6 +23,10 @@ SPEED_UP = "speed_up"
 SPEED_DOWN = "speed_down"
 SPEED_RESET = "speed_reset"
 RECENT_PLAYLISTS = "recent_playlists"
+MARKER_SET = "marker_set"
+MARKER_PREVIOUS = "marker_previous"
+MARKER_NEXT = "marker_next"
+MARKER_DELETE = "marker_delete"
 
 ACTIONS = [
     BACK,
@@ -34,6 +38,10 @@ ACTIONS = [
     SPEED_DOWN,
     SPEED_RESET,
     RECENT_PLAYLISTS,
+    MARKER_SET,
+    MARKER_PREVIOUS,
+    MARKER_NEXT,
+    MARKER_DELETE,
 ]
 
 ACTION_LABELS = {
@@ -46,6 +54,10 @@ ACTION_LABELS = {
     SPEED_DOWN: "Tempo verringern (−1 BPM)",
     SPEED_RESET: "Originaltempo (1,0x)",
     RECENT_PLAYLISTS: "Zuletzt verwendete Playlists",
+    MARKER_SET: "Markierung setzen",
+    MARKER_PREVIOUS: "Zur vorherigen Markierung",
+    MARKER_NEXT: "Zur nächsten Markierung",
+    MARKER_DELETE: "Nächstgelegene Markierung löschen",
 }
 
 # Zusätzliche Erklärung für Aktionen mit Sonderverhalten (im Dialog angezeigt).
@@ -69,6 +81,10 @@ DEFAULT_BINDINGS = {
     SPEED_DOWN: ["-", ""],
     SPEED_RESET: ["0", ""],
     RECENT_PLAYLISTS: ["L", ""],
+    MARKER_SET: ["M", ""],
+    MARKER_PREVIOUS: [",", ""],
+    MARKER_NEXT: [".", ""],
+    MARKER_DELETE: ["Shift+M", ""],
 }
 
 

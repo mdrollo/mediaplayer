@@ -1,15 +1,17 @@
 """Wiederverwendbare UI-Bausteine für die großen, touch-tauglichen Listen."""
 
 from PySide6.QtCore import QRect, QSize, Qt
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QPainter
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
     QListWidget,
     QScroller,
     QScrollerProperties,
+    QSlider,
     QStyle,
     QStyledItemDelegate,
+    QStyleOptionSlider,
     QStyleOptionViewItem,
     QWidget,
 )
@@ -27,6 +29,7 @@ _TEXT = QColor("#f2f2f2")
 _TEXT_DISABLED = QColor("#6b6f78")
 _SUBTEXT = QColor("#b8bcc4")
 _SUBTEXT_SELECTED = QColor("#e3eaff")
+_MARKER = QColor("#ffb454")
 
 
 def enable_touch_scrolling(view: QAbstractItemView) -> None:
@@ -121,6 +124,46 @@ class BigListWidget(QListWidget):
         self.setUniformItemSizes(False)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         enable_touch_scrolling(self)
+
+
+class MarkerSlider(QSlider):
+    """Waagerechter Regler, der Markierungen als senkrechte Striche anzeigt."""
+
+    def __init__(self, orientation=Qt.Orientation.Horizontal, parent=None):
+        super().__init__(orientation, parent)
+        self._markers: list[int] = []
+
+    def set_markers(self, positions: list[int]) -> None:
+        self._markers = list(positions)
+        self.update()
+
+    def markers(self) -> list[int]:
+        return list(self._markers)
+
+    def marker_x(self, value: int) -> int:
+        """x-Koordinate der Reglermitte bei ``value`` (wie der Knopf sie erreicht)."""
+        opt = QStyleOptionSlider()
+        self.initStyleOption(opt)
+        style = self.style()
+        groove = style.subControlRect(QStyle.ComplexControl.CC_Slider, opt, QStyle.SubControl.SC_SliderGroove, self)
+        handle = style.subControlRect(QStyle.ComplexControl.CC_Slider, opt, QStyle.SubControl.SC_SliderHandle, self)
+        span = max(0, groove.width() - handle.width())
+        offset = QStyle.sliderPositionFromValue(self.minimum(), self.maximum(), value, span, opt.upsideDown)
+        return groove.x() + handle.width() // 2 + offset
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if not self._markers or self.maximum() <= self.minimum():
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(_MARKER, 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        top, bottom = 4, self.height() - 4
+        for value in self._markers:
+            if self.minimum() <= value <= self.maximum():
+                x = self.marker_x(value)
+                painter.drawLine(x, top, x, bottom)
+        painter.end()
 
 
 def size_dialog(dialog: QDialog, parent: QWidget | None, fraction: float, fullscreen_like_parent: bool) -> None:

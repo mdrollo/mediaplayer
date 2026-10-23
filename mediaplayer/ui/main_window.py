@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from .. import APP_NAME
 from ..player.keyboard import KeyboardController
 from ..player.analysis import TrackAnalysisService
+from ..player.markers import MarkerController
 from ..player.tempo import TempoController
 from ..player.playback import (
     SPEED_MAX,
@@ -29,6 +30,7 @@ from ..player.playback import (
     SPEED_STEP,
     VOLUME_STEP,
     PlaybackController,
+    format_ms,
 )
 from ..playlist import (
     AUDIO_EXTENSIONS,
@@ -43,18 +45,9 @@ from .file_browser import FileBrowserDialog
 from .key_config_dialog import KeyConfigDialog
 from .recent_playlists_dialog import RecentPlaylistsDialog
 from .style import BUTTON_HEIGHT, ICON_SIZE
-from .widgets import enable_touch_scrolling
+from .widgets import MarkerSlider, enable_touch_scrolling
 
 MESSAGE_TIMEOUT_MS = 6000
-
-
-def format_ms(ms: int) -> str:
-    total = max(0, int(ms) // 1000)
-    hours, rest = divmod(total, 3600)
-    minutes, seconds = divmod(rest, 60)
-    if hours:
-        return f"{hours}:{minutes:02d}:{seconds:02d}"
-    return f"{minutes}:{seconds:02d}"
 
 
 def format_speed(speed: float) -> str:
@@ -99,11 +92,13 @@ class MainWindow(QMainWindow):
         # Reihenfolge wichtig: die Analyse muss Titelwechsel vor dem Tempo sehen.
         self.analysis = TrackAnalysisService(self.controller, self.settings, parent=self)
         self.tempo = TempoController(self.controller, self.settings, self.analysis, parent=self)
+        self.markers = MarkerController(self.controller, self.settings, parent=self)
         self._message_token = 0
 
         self._build_ui()
         self._connect_controller()
         self._connect_tempo()
+        self._connect_markers()
 
         self.keyboard = KeyboardController(self, self.settings.key_bindings())
         self.keyboard.triggered.connect(self._on_key_action)
@@ -148,7 +143,7 @@ class MainWindow(QMainWindow):
         self._update_clock()
 
         # --- Positionsregler (anklickbar und verschiebbar, siehe PlayerStyle)
-        self.position_slider = QSlider(Qt.Orientation.Horizontal)
+        self.position_slider = MarkerSlider(Qt.Orientation.Horizontal)
         self.position_slider.setRange(0, 0)
         self.position_slider.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.position_slider.setToolTip("Klicken oder ziehen, um die Position zu ändern")
@@ -204,6 +199,38 @@ class MainWindow(QMainWindow):
         self.volume_label.setObjectName("volumeLabel")
         transport.addWidget(self.volume_label)
         root.addLayout(transport)
+
+        # --- Markierungen (Sprungmarken im aktuellen Titel)
+        marker_row = QHBoxLayout()
+        marker_row.setSpacing(16)
+        marker_title = QLabel("Markierungen")
+        marker_title.setObjectName("sectionLabel")
+        marker_row.addWidget(marker_title)
+        marker_row.addWidget(self._make_text_button(
+            "Setzen", "Markierung an der gerade gespielten Stelle setzen", self.markers.add_at_current
+        ))
+        self.marker_prev_button = self._make_text_button(
+            "◀", "Zur vorherigen Markierung springen", self.markers.jump_previous
+        )
+        marker_row.addWidget(self.marker_prev_button)
+        self.marker_next_button = self._make_text_button(
+            "▶", "Zur nächsten Markierung springen", self.markers.jump_next
+        )
+        marker_row.addWidget(self.marker_next_button)
+        self.marker_delete_button = self._make_text_button(
+            "Löschen", "Die Markierung löschen, die der aktuellen Stelle am nächsten ist",
+            self.markers.delete_nearest,
+        )
+        marker_row.addWidget(self.marker_delete_button)
+        self.marker_clear_button = self._make_text_button(
+            "Alle löschen", "Alle Markierungen dieses Titels löschen", self.clear_markers
+        )
+        marker_row.addWidget(self.marker_clear_button)
+        self.marker_count_label = QLabel()
+        self.marker_count_label.setObjectName("sectionLabel")
+        marker_row.addWidget(self.marker_count_label)
+        marker_row.addStretch(1)
+        root.addLayout(marker_row)
 
         # --- Geschwindigkeit
         speed_row = QHBoxLayout()
@@ -329,6 +356,10 @@ class MainWindow(QMainWindow):
             kb.SPEED_RESET: self.tempo.reset,
             # Verzögert öffnen, damit der Dialog nicht innerhalb des Tastenereignisses startet.
             kb.RECENT_PLAYLISTS: lambda: QTimer.singleShot(0, self.show_recent_playlists),
+            kb.MARKER_SET: self.markers.add_at_current,
+            kb.MARKER_PREVIOUS: self.markers.jump_previous,
+            kb.MARKER_NEXT: self.markers.jump_next,
+            kb.MARKER_DELETE: self.markers.delete_nearest,
             f"{kb.BACK}_single": c.seek_to_start,
             f"{kb.BACK}_double": c.previous_track,
             f"{kb.BACK}_hold_start": lambda: c.start_scrub(-1),
@@ -443,6 +474,32 @@ class MainWindow(QMainWindow):
             self.tempo.set_bpm(value)
         else:
             self.controller.set_speed(value * SPEED_STEP)
+
+    # ===================================================== Markierungen
+    def _connect_markers(self) -> None:
+        self.markers.markersChanged.connect(self._on_markers_changed)
+        self.markers.message.connect(self.show_message)
+        self._on_markers_changed(self.markers.markers())
+
+    def _on_markers_changed(self, positions: list) -> None:
+        self.position_slider.set_markers(positions)
+        has_markers = bool(positions)
+        for button in (
+            self.marker_prev_button, self.marker_next_button,
+            self.marker_delete_button, self.marker_clear_button,
+        ):
+            button.setEnabled(has_markers)
+        self.marker_count_label.setText(f"{len(positions)} gesetzt" if has_markers else "keine")
+
+    def clear_markers(self) -> None:
+        count = len(self.markers.markers())
+        if not count:
+            return
+        answer = self._run_modal(lambda: QMessageBox.question(
+            self, "Markierungen löschen", f"Alle {count} Markierung(en) dieses Titels löschen?"
+        ))
+        if answer == QMessageBox.StandardButton.Yes:
+            self.markers.clear()
 
     def _refresh_playlist(self) -> None:
         playlist = self.controller.playlist

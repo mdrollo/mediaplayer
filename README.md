@@ -89,6 +89,24 @@ Einstellungsdatei und wird nach einer Änderung der Datei neu ermittelt.
 - Musik ohne klaren Takt (Hörbücher, Klassik) wird als „BPM unbekannt“
   angezeigt und dann wie bisher über die Geschwindigkeit gesteuert.
 
+### Markierungen
+
+Mit Markierungen merkst du dir Stellen in einem Titel, zum Beispiel den Beginn
+eines Refrains, und springst später direkt dorthin.
+
+- **Setzen** (Taste `M`): setzt eine Markierung an der gerade gespielten Stelle.
+  Liegt dort schon eine (näher als 0,5 s), wird keine zweite gesetzt.
+- **◀ / ▶** (Tasten `,` / `.`): springt zur vorherigen bzw. nächsten Markierung.
+  Läuft die Musik gerade knapp hinter einer Markierung (bis 1,5 s), springt ◀
+  zur Markierung davor. So geht man mit mehrfachem Drücken Markierung für
+  Markierung zurück.
+- **Löschen** (Taste `Umschalt + M`): entfernt die Markierung, die der aktuellen
+  Stelle am nächsten ist. **Alle löschen** entfernt nach einer Rückfrage alle
+  Markierungen des Titels.
+- Die Markierungen erscheinen als orange Striche auf dem Positionsregler. Sie
+  werden pro Datei gespeichert (`markers.json` neben der Einstellungsdatei) und
+  gelten unabhängig vom eingestellten Tempo.
+
 ### Dateiauswahl
 
 Hinzufügen, Playlist laden und Playlist speichern verwenden einen eigenen
@@ -136,6 +154,9 @@ dann nur geladen, nicht automatisch abgespielt).
 | `+` / `-` | Tempo ±1 BPM (ohne bekanntes Tempo ±0,01x); gedrückt halten läuft weiter |
 | `0` | Originaltempo (1,0x) |
 | `L` | Zuletzt verwendete Playlists öffnen/schließen |
+| `M` | Markierung an der aktuellen Stelle setzen |
+| `,` / `.` | Zur vorherigen / nächsten Markierung springen |
+| `Umschalt + M` | Nächstgelegene Markierung löschen |
 
 `+`, `-` und `0` funktionieren auch auf dem Ziffernblock und unabhängig vom
 Tastaturlayout (auf US-Tastaturen ist `+` = Umschalt + `=`).
@@ -180,6 +201,7 @@ mediaplayer/
     bpm.py                      Tempo-Erkennung (numpy)
     silence.py                  Erkennung von Musikanfang/-ende
     tempo.py                    TempoController (BPM einstellen, BPM fest, Tap)
+    markers.py                  MarkerController (Markierungen setzen, anspringen)
   playlist/
     model.py                    Playlist-Datenmodell (ohne Qt)
     storage.py                  Laden/Speichern von M3U8- und JSON-Playlists

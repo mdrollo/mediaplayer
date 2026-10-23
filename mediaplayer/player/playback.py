@@ -54,6 +54,15 @@ def perceptual_to_linear(percent: int) -> float:
     return math.pow(10.0, db / 20.0)
 
 
+def format_ms(ms: int) -> str:
+    total = max(0, int(ms) // 1000)
+    hours, rest = divmod(total, 3600)
+    minutes, seconds = divmod(rest, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes}:{seconds:02d}"
+
+
 def normalize_speed(speed: float) -> float:
     """Begrenzt auf SPEED_MIN..SPEED_MAX.
 

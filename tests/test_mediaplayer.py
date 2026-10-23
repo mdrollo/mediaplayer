@@ -213,6 +213,12 @@ class KeyNormalizationTests(unittest.TestCase):
         self.assertEqual(self.k(Qt.Key.Key_Plus, text="+"), DEFAULT_BINDINGS["speed_up"][0])
         self.assertEqual(self.k(Qt.Key.Key_Minus, text="-"), DEFAULT_BINDINGS["speed_down"][0])
         self.assertEqual(self.k(Qt.Key.Key_0, text="0"), DEFAULT_BINDINGS["speed_reset"][0])
+        self.assertEqual(self.k(Qt.Key.Key_M, text="m"), DEFAULT_BINDINGS["marker_set"][0])
+        self.assertEqual(self.k(Qt.Key.Key_Comma, text=","), DEFAULT_BINDINGS["marker_previous"][0])
+        self.assertEqual(self.k(Qt.Key.Key_Period, text="."), DEFAULT_BINDINGS["marker_next"][0])
+        self.assertEqual(
+            self.k(Qt.Key.Key_M, Qt.KeyboardModifier.ShiftModifier, "M"), DEFAULT_BINDINGS["marker_delete"][0]
+        )
 
     def test_shift_and_keypad_ignored_for_symbols(self):
         self.assertEqual(self.k(Qt.Key.Key_Plus, Qt.KeyboardModifier.ShiftModifier, "+"), "+")
@@ -704,6 +710,92 @@ class SkipSilenceTests(unittest.TestCase):
         if self.c.position() == 0:
             self.skipTest("Kein Audio-Backend verfügbar.")
         self.assertLess(self.c.position(), 900)
+
+
+class MarkerTests(unittest.TestCase):
+    """Markierungen setzen, anspringen, löschen und dauerhaft speichern."""
+
+    def setUp(self):
+        from mediaplayer.player.markers import MarkerController
+
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        d = Path(self.tmp.name)
+        self.ini = str(d / "s.ini")
+        self.settings = AppSettings(QSettings(self.ini, QSettings.Format.IniFormat))
+        self.files = [str(make_wav(d / f"song{i}.wav", 10.0)) for i in range(2)]
+        self.c = PlaybackController()
+        self.markers = MarkerController(self.c, self.settings)
+        self.messages = []
+        self.markers.message.connect(self.messages.append)
+        self.c.add_files(self.files)
+        wait(300)
+
+    def tearDown(self):
+        self.c.replace_playlist([])
+        for obj in (self.markers, self.c):
+            obj.deleteLater()
+        wait(100)
+        self.tmp.cleanup()
+
+    def seek(self, ms):
+        self.c.seek(ms)
+        deadline = 2000
+        while abs(self.c.position() - ms) > 50 and deadline > 0:
+            wait(20)
+            deadline -= 20
+        if abs(self.c.position() - ms) > 50:
+            self.skipTest("Kein Audio-Backend verfügbar (Position nicht übernommen).")
+
+    def seek_done(self, ms):
+        wait(200)
+        self.assertAlmostEqual(self.c.position(), ms, delta=50)
+
+    def test_neighbours(self):
+        from mediaplayer.player.markers import nearest_marker, next_marker, previous_marker
+
+        marks = [2000, 5000, 8000]
+        self.assertEqual(previous_marker(marks, 6000), 2000)  # 5000 liegt im Toleranzfenster
+        self.assertEqual(previous_marker(marks, 7000), 5000)
+        self.assertIsNone(previous_marker(marks, 3000))
+        self.assertEqual(next_marker(marks, 5000), 8000)       # die Markierung selbst zählt nicht
+        self.assertEqual(next_marker(marks, 0), 2000)
+        self.assertIsNone(next_marker(marks, 8000))
+        self.assertEqual(nearest_marker(marks, 6000), 5000)
+        self.assertIsNone(nearest_marker([], 6000))
+
+    def test_set_jump_delete(self):
+        for ms in (6000, 2000):
+            self.seek(ms)
+            self.markers.add_at_current()
+        self.seek(2200)
+        self.markers.add_at_current()  # zu nah an 2000: keine zweite Markierung
+        self.assertEqual(self.markers.markers(), [2000, 6000])
+
+        self.markers.jump_next()
+        self.seek_done(6000)
+        self.markers.jump_previous()
+        self.seek_done(2000)
+
+        self.markers.delete_nearest()
+        self.assertEqual(self.markers.markers(), [6000])
+        self.markers.clear()
+        self.assertEqual(self.markers.markers(), [])
+        self.assertEqual(self.settings.markers(self.files[0]), [])
+
+    def test_markers_follow_track_and_persist(self):
+        self.seek(4000)
+        self.markers.add_at_current()
+        self.c.next_track()
+        self.assertEqual(self.markers.markers(), [])
+        self.c.previous_track()
+        self.assertEqual(len(self.markers.markers()), 1)
+        reloaded = AppSettings(QSettings(self.ini, QSettings.Format.IniFormat))
+        self.assertEqual(reloaded.markers(self.files[0]), self.markers.markers())
+
+    def test_without_markers(self):
+        self.markers.jump_next()
+        self.markers.delete_nearest()
+        self.assertEqual(self.messages, ["Dieser Titel hat keine Markierungen."] * 2)
 
 
 class PlaybackTests(unittest.TestCase):
