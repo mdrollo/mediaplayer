@@ -93,6 +93,19 @@ def run_selftest(out_file: str) -> int:
                 check("Audio-Decoder", False, "keine Antwort")
             analyzer.cancel()
 
+            # Stimmgerät: Tonerkennung ohne Mikrofon mit einem erzeugten Ton prüfen.
+            from .player.pitch import detect_pitch, note_for_frequency
+
+            t = numpy.arange(4410) / 44100
+            tone = 0.2 * numpy.sin(2 * numpy.pi * 110 * t) + 0.3 * numpy.sin(4 * numpy.pi * 110 * t)
+            pitch = detect_pitch(tone, 44100)
+            name = note_for_frequency(pitch[0])[:2] if pitch else None
+            check(
+                "Stimmgerät (Tonerkennung)",
+                pitch is not None and abs(pitch[0] - 110) < 0.1 and name == ("A", 2),
+                f"{pitch[0]:.2f} Hz = {name[0]}{name[1]}" if pitch else "kein Ton erkannt",
+            )
+
             player = QMediaPlayer()
             output = QAudioOutput()
             output.setVolume(0.0)

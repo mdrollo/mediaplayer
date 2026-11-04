@@ -322,6 +322,18 @@ class AppSettings:
         except OSError:
             pass
 
+    # -------------------------------------------------------- Stimmgerät
+    def tuner_a4(self, default: float = 440.0) -> float:
+        """Kammerton des Stimmgeräts in Hz (415–466)."""
+        try:
+            value = float(self._s.value("tuner/a4", default))
+        except (TypeError, ValueError):
+            return default
+        return max(415.0, min(466.0, value))
+
+    def set_tuner_a4(self, a4: float) -> None:
+        self._s.setValue("tuner/a4", f"{a4:.1f}")
+
     # ------------------------------------------------------ Dateidialoge
     def last_directory(self) -> str:
         return str(self._s.value("paths/last_directory", ""))

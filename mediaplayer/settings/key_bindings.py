@@ -27,6 +27,7 @@ MARKER_SET = "marker_set"
 MARKER_PREVIOUS = "marker_previous"
 MARKER_NEXT = "marker_next"
 MARKER_DELETE = "marker_delete"
+TUNER = "tuner"
 
 ACTIONS = [
     BACK,
@@ -42,6 +43,7 @@ ACTIONS = [
     MARKER_PREVIOUS,
     MARKER_NEXT,
     MARKER_DELETE,
+    TUNER,
 ]
 
 ACTION_LABELS = {
@@ -58,6 +60,7 @@ ACTION_LABELS = {
     MARKER_PREVIOUS: "Zur vorherigen Markierung",
     MARKER_NEXT: "Zur nächsten Markierung",
     MARKER_DELETE: "Nächstgelegene Markierung löschen",
+    TUNER: "Stimmgerät ein-/ausblenden",
 }
 
 # Zusätzliche Erklärung für Aktionen mit Sonderverhalten (im Dialog angezeigt).
@@ -85,6 +88,7 @@ DEFAULT_BINDINGS = {
     MARKER_PREVIOUS: [",", ""],
     MARKER_NEXT: [".", ""],
     MARKER_DELETE: ["Shift+M", ""],
+    TUNER: ["T", ""],
 }
 
 

@@ -52,5 +52,8 @@ if IS_MAC:
             "CFBundleVersion": __version__,
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
+            # Pflicht für den Mikrofonzugriff (Stimmgerät); ohne diesen Text
+            # beendet macOS das Programm beim Öffnen des Mikrofons.
+            "NSMicrophoneUsageDescription": "Das Stimmgerät hört über das Mikrofon, welcher Ton gespielt wird.",
         },
     )
