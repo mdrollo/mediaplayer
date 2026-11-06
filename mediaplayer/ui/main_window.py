@@ -27,6 +27,7 @@ from ..player.keyboard import KeyboardController
 from ..player.analysis import TrackAnalysisService
 from ..player.markers import MarkerController
 from ..player.tempo import TempoController
+from ..player.tuner import TunerController
 from ..player.playback import (
     SPEED_MAX,
     SPEED_MIN,
@@ -47,6 +48,7 @@ from ..settings import key_bindings as kb
 from .file_browser import FileBrowserDialog
 from .key_config_dialog import KeyConfigDialog
 from .recent_playlists_dialog import RecentPlaylistsDialog
+from .tuner_panel import TunerPanel
 from .style import BUTTON_HEIGHT, ICON_SIZE, TRANSPORT_HEIGHT, px
 from .waveform_slider import WaveformSlider
 from .widgets import ElidedLabel, enable_touch_scrolling
@@ -98,12 +100,14 @@ class MainWindow(QMainWindow):
         self.analysis = TrackAnalysisService(self.controller, self.settings, parent=self)
         self.tempo = TempoController(self.controller, self.settings, self.analysis, parent=self)
         self.markers = MarkerController(self.controller, self.settings, parent=self)
+        self.tuner = TunerController(self.settings.tuner_a4(), parent=self)
         self._message_token = 0
 
         self._build_ui()
         self._connect_controller()
         self._connect_tempo()
         self._connect_markers()
+        self._connect_tuner()
 
         self.keyboard = KeyboardController(self, self.settings.key_bindings())
         self.keyboard.triggered.connect(self._on_key_action)
@@ -187,9 +191,18 @@ class MainWindow(QMainWindow):
         columns.setRowStretch(0, 1)
         root.addLayout(columns, 1)
 
+        # Links oben das einblendbare Stimmgerät (Button "Stimmgerät" bzw. Taste T),
+        # darunter die Playlist. Das Bedienfeld rechts behält so seine volle Höhe.
+        left = QVBoxLayout()
+        left.setContentsMargins(0, 0, 0, 0)
+        left.setSpacing(px(14))
+        self.tuner_panel = TunerPanel(self.tuner.a4())
+        self.tuner_panel.hide()
+        left.addWidget(self.tuner_panel)
         self.playlist_view = PlaylistWidget()
         self.playlist_view.playRequested.connect(self.controller.play_index)
-        columns.addWidget(self.playlist_view, 0, 0)
+        left.addWidget(self.playlist_view, 1)
+        columns.addLayout(left, 0, 0)
         self.playlist_view.setFocus()
 
         panel_widget = QWidget()
@@ -338,10 +351,15 @@ class MainWindow(QMainWindow):
         app_bar.setHorizontalSpacing(px(12))
         for column in range(PANEL_COLUMNS):
             app_bar.setColumnStretch(column, 1)
+        self.tuner_button = self._make_text_button(
+            "Stimmgerät", "Chromatisches Stimmgerät ein-/ausblenden (Mikrofon)", lambda: None
+        )
+        self.tuner_button.setCheckable(True)
+        self.tuner_button.toggled.connect(self.set_tuner_visible)
         keys_button = self._make_text_button("Tastatur", "Tastaturbelegung konfigurieren", self.configure_keys)
         quit_button = self._make_text_button("Beenden", "Programm beenden", self.close)
         quit_button.setObjectName("quitButton")
-        self._add_button_row(app_bar, 0, [keys_button, quit_button])
+        self._add_button_row(app_bar, 0, [self.tuner_button, keys_button, quit_button])
         columns.addLayout(app_bar, 1, 1)
 
     def _make_speed_label(self) -> QLabel:
@@ -433,6 +451,7 @@ class MainWindow(QMainWindow):
             kb.MARKER_PREVIOUS: self.markers.jump_previous,
             kb.MARKER_NEXT: self.markers.jump_next,
             kb.MARKER_DELETE: self.markers.delete_nearest,
+            kb.TUNER: self.toggle_tuner,
             f"{kb.BACK}_single": c.seek_to_start,
             f"{kb.BACK}_double": c.previous_track,
             f"{kb.BACK}_hold_start": lambda: c.start_scrub(-1),
@@ -585,6 +604,33 @@ class MainWindow(QMainWindow):
         ))
         if answer == QMessageBox.StandardButton.Yes:
             self.markers.clear()
+
+    # ======================================================= Stimmgerät
+    def _connect_tuner(self) -> None:
+        self.tuner.reading.connect(self.tuner_panel.show_reading)
+        self.tuner.message.connect(self.show_message)
+        self.tuner_panel.a4Changed.connect(self._on_tuner_a4_changed)
+        self.tuner_panel.closeRequested.connect(lambda: self.set_tuner_visible(False))
+
+    def toggle_tuner(self) -> None:
+        self.set_tuner_visible(not self.tuner_panel.isVisible())
+
+    def set_tuner_visible(self, visible: bool) -> None:
+        """Stimmgerät ein-/ausblenden; das Mikrofon ist nur offen, solange es sichtbar ist."""
+        self.tuner_button.blockSignals(True)
+        self.tuner_button.setChecked(visible)
+        self.tuner_button.blockSignals(False)
+        if visible == self.tuner_panel.isVisible():
+            return
+        self.tuner_panel.setVisible(visible)
+        if visible:
+            self.tuner.start()
+        else:
+            self.tuner.stop()
+
+    def _on_tuner_a4_changed(self, a4: float) -> None:
+        self.tuner.set_a4(a4)
+        self.settings.set_tuner_a4(a4)
 
     def _refresh_playlist(self) -> None:
         playlist = self.controller.playlist
@@ -814,6 +860,7 @@ class MainWindow(QMainWindow):
             event.acceptProposedAction()
 
     def closeEvent(self, event) -> None:
+        self.tuner.stop()
         self.analysis.shutdown()
         self.controller.stop()
         self._save_session()

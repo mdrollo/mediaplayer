@@ -256,6 +256,27 @@ QHeaderView::section {
     background-color: #2b2d33;
     border: none;
 }
+QFrame#tunerPanel {
+    background-color: #17181b;
+    border: 2px solid #3a3d44;
+    border-radius: 10px;
+}
+QFrame#tunerPanel QLabel, QFrame#tunerPanel QWidget {
+    background-color: transparent;
+}
+QFrame#tunerPanel QPushButton {
+    background-color: #2b2d33;
+}
+QFrame#tunerPanel QPushButton:hover {
+    background-color: #363941;
+}
+QFrame#tunerPanel QPushButton:pressed {
+    background-color: #2f6fd6;
+}
+QLabel#tunerCents {
+    font-size: 30px;
+    font-weight: bold;
+}
 QToolTip {
     font-size: 20px;
 }

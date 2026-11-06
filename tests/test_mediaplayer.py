@@ -1088,6 +1088,147 @@ class PlaybackTests(unittest.TestCase):
         self.assertEqual(len(self.c.playlist), 2)
 
 
+class TunerTests(unittest.TestCase):
+    """Chromatisches Stimmgerät: Tonerkennung, Glättung und Einbindung ins Fenster."""
+
+    RATE = 44100
+
+    def tone(self, freq: float, seconds: float = 0.1, harmonics=(1.0,), noise: float = 0.0):
+        import numpy as np
+
+        t = np.arange(int(self.RATE * seconds)) / self.RATE
+        signal = sum(a * np.sin(2 * np.pi * (k + 1) * freq * t + k) for k, a in enumerate(harmonics))
+        if noise:
+            signal = signal + noise * np.random.default_rng(7).standard_normal(len(t))
+        return 0.3 * signal / max(1.0, sum(harmonics))
+
+    def test_detects_pitch_within_one_cent(self):
+        from mediaplayer.player.pitch import detect_pitch
+
+        # Tiefes Bass-E bis höchstes Klavier-C; mit starken Obertönen (Gitarre/Klavier),
+        # die einfache Verfahren gern eine Oktave danebenliegen lassen.
+        for freq in (41.2, 55.0, 82.41, 110.0, 196.0, 329.63, 440.0, 880.0, 1760.0, 3520.0, 4186.0):
+            for harmonics in ((1.0,), (0.3, 0.8, 0.5, 0.3)):
+                result = detect_pitch(self.tone(freq, harmonics=harmonics, noise=0.02), self.RATE)
+                self.assertIsNotNone(result, freq)
+                cents = 1200 * math.log2(result[0] / freq)
+                self.assertLess(abs(cents), 1.0, f"{freq} Hz: {cents:+.2f} Cent")
+
+    def test_no_pitch_in_silence_or_noise(self):
+        import numpy as np
+
+        from mediaplayer.player.pitch import detect_pitch
+
+        self.assertIsNone(detect_pitch(np.zeros(4410), self.RATE))
+        self.assertIsNone(detect_pitch(0.2 * np.random.default_rng(1).standard_normal(4410), self.RATE))
+
+    def test_note_names(self):
+        from mediaplayer.player.pitch import note_for_frequency
+
+        name, octave, cents, target = note_for_frequency(440.0)
+        self.assertEqual((name, octave), ("A", 4))
+        self.assertAlmostEqual(cents, 0.0, places=6)
+        self.assertAlmostEqual(target, 440.0)
+        self.assertEqual(note_for_frequency(246.94)[:2], ("H", 3))     # deutsch: H statt B
+        self.assertEqual(note_for_frequency(466.16)[:2], ("B", 4))     # B = A♯
+        self.assertEqual(note_for_frequency(277.18)[:2], ("C♯", 4))
+        self.assertEqual(note_for_frequency(41.2)[:2], ("E", 1))
+        # +20 Cent über A4; bei Kammerton 442 Hz liegt derselbe Ton fast genau richtig.
+        sharp = 440.0 * 2 ** (20 / 1200)
+        self.assertAlmostEqual(note_for_frequency(sharp)[2], 20.0, places=4)
+        self.assertAlmostEqual(note_for_frequency(sharp, 442.0)[2], 20 - 1200 * math.log2(442 / 440), places=4)
+
+    def test_decode_int16_stereo(self):
+        import numpy as np
+        from PySide6.QtMultimedia import QAudioFormat
+
+        from mediaplayer.player.tuner import decode_samples
+
+        fmt = QAudioFormat()
+        fmt.setSampleRate(48000)
+        fmt.setChannelCount(2)
+        fmt.setSampleFormat(QAudioFormat.SampleFormat.Int16)
+        data = np.array([16384, 0, -32768, -32768], dtype=np.int16).tobytes()
+        np.testing.assert_allclose(decode_samples(data, fmt), [0.25, -1.0])
+
+    def test_controller_reading_and_reference(self):
+        from mediaplayer.player.tuner import HOLD_MS, UPDATE_MS, TunerController
+
+        tuner = TunerController(440.0)
+        readings = []
+        tuner.reading.connect(lambda *args: readings.append(args))
+        for _ in range(6):
+            tuner.feed(self.tone(440.0 * 2 ** (4 / 1200)), self.RATE)
+            tuner.process()
+        name, octave, cents, freq, target = readings[-1]
+        self.assertEqual((name, octave), ("A", 4))
+        self.assertAlmostEqual(cents, 4.0, delta=0.5)
+        self.assertAlmostEqual(target, 440.0)
+
+        tuner.set_a4(442.0)  # Anzeige sofort umgerechnet, ohne neuen Ton
+        self.assertAlmostEqual(readings[-1][2], 4 - 1200 * math.log2(442 / 440), delta=0.5)
+        self.assertAlmostEqual(readings[-1][4], 442.0)
+        tuner.set_a4(1000)
+        self.assertEqual(tuner.a4(), 466.0)  # begrenzt
+        tuner.set_a4(440.0)
+
+        # Neuer Ton: Glättung beginnt neu, kein langsames "Hinüberwandern".
+        tuner.feed(self.tone(329.63), self.RATE)
+        tuner.process()
+        self.assertEqual(readings[-1][0], "E")
+        self.assertAlmostEqual(readings[-1][2], 0.0, delta=0.5)
+
+        # Nach dem Verklingen bleibt der Ton kurz stehen, dann wird die Anzeige geleert.
+        import numpy as np
+
+        tuner.feed(np.zeros(4410), self.RATE)
+        count = len(readings)
+        for _ in range(HOLD_MS // UPDATE_MS - 1):
+            tuner.process()
+        self.assertEqual(len(readings), count)
+        tuner.process()
+        self.assertEqual(readings[-1][0], "")
+
+    def test_toggle_in_main_window(self):
+        from mediaplayer.ui.main_window import MainWindow
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            settings = AppSettings(QSettings(str(Path(tmp) / "s.ini"), QSettings.Format.IniFormat))
+            self.assertEqual(settings.tuner_a4(), 440.0)
+            w = MainWindow(settings)
+            w.resize(1600, 900)
+            w.show()
+            wait(50)
+            self.assertFalse(w.tuner_panel.isVisible())
+
+            # Taste T blendet ein (das Testsystem hat kein Mikrofon → nur Meldung).
+            app.sendEvent(w.playlist_view, key_event(QEvent.Type.KeyPress, Qt.Key.Key_T, text="t"))
+            self.assertTrue(w.tuner_panel.isVisible())
+            self.assertTrue(w.tuner_button.isChecked())
+
+            for _ in range(4):
+                w.tuner.feed(self.tone(196.0 * 2 ** (-30 / 1200)), self.RATE)
+                w.tuner.process()
+            self.assertIn("G", w.tuner_panel.note_label.text())
+            self.assertIn("zu tief", w.tuner_panel.cents_label.text())
+            self.assertAlmostEqual(w.tuner_panel.gauge.cents(), -30, delta=1)
+
+            w.tuner_panel.a4_up.click()
+            self.assertEqual(settings.tuner_a4(), 441.0)
+
+            w.tuner_button.click()  # Button blendet wieder aus und schließt das Mikrofon
+            self.assertFalse(w.tuner_panel.isVisible())
+            self.assertFalse(w.tuner.is_running())
+            w.tuner_button.click()
+            self.assertTrue(w.tuner_panel.isVisible())
+            w.tuner_panel.closeRequested.emit()  # ✕ in der Leiste
+            self.assertFalse(w.tuner_panel.isVisible())
+            self.assertFalse(w.tuner_button.isChecked())
+            w.close()
+            w.deleteLater()
+            wait(100)
+
+
 def tearDownModule():
     """Alle Qt-Objekte abbauen, solange die QApplication noch existiert.
 

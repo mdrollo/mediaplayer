@@ -34,7 +34,8 @@ stattdessen als maximiertes Fenster.
 
 Unter Kopfzeile und Positionsregler ist das Fenster zweigeteilt: links die
 Playlist über die volle Höhe, rechts das Bedienfeld mit Wiedergabe,
-Lautstärke, Tempo und Markierungen.
+Lautstärke, Tempo und Markierungen. Über der Playlist lässt sich ein
+chromatisches Stimmgerät einblenden.
 
 | Element | Funktion |
 |---|---|
@@ -50,6 +51,7 @@ Lautstärke, Tempo und Markierungen.
 | Mischen | Reihenfolge einmal zufällig durchmischen. Der aktuelle Titel rückt nach oben und spielt ungestört weiter. Die gemischte Reihenfolge wird nicht gespeichert – beim nächsten Start gilt wieder die ursprüngliche (außer man speichert sie bewusst mit „Speichern“) |
 | Laden / Speichern | `.m3u8`/`.m3u` (auch für andere Player) oder `.json` |
 | Zuletzt | Schnellauswahl der 10 zuletzt geladenen oder gespeicherten Playlists (Taste `L`). Antippen + „Laden“, Doppelklick, Eingabetaste oder Ziffern 1–9; nicht mehr vorhandene Playlists erscheinen grau und lassen sich mit „Aus Liste entfernen“ (oder Entf) löschen. `L` schließt das Panel wieder |
+| Stimmgerät | Chromatisches Stimmgerät über der Playlist ein-/ausblenden (Taste `T`, siehe unten) |
 | Tastatur | Tastaturbelegung konfigurieren |
 | Beenden | Programm schließen |
 
@@ -131,6 +133,33 @@ eines Refrains, und springst später direkt dorthin.
   werden pro Datei gespeichert (`markers.json` neben der Einstellungsdatei) und
   gelten unabhängig vom eingestellten Tempo.
 
+### Stimmgerät
+
+Chromatisches Stimmgerät für jedes Instrument (und die Stimme): Es erkennt den
+gespielten Ton über das Mikrofon und zeigt an, wie weit er vom nächsten
+Halbton entfernt ist.
+
+- **Einblenden:** Schaltfläche „Stimmgerät“ unten rechts oder Taste `T`.
+  Nochmals drücken, `T` oder „✕“ blendet es wieder aus. Das Mikrofon ist nur
+  geöffnet, solange das Stimmgerät zu sehen ist.
+- **Anzeige:** links der erkannte Ton mit Oktave (deutsche Tonnamen: H statt B,
+  B = A♯; A4 = Kammerton), daneben Abweichung in Cent mit „zu tief“ / „zu
+  hoch“ / „gestimmt“ sowie gemessene und Soll-Frequenz. Darunter eine Skala von
+  −50 bis +50 Cent: Der Zeiger ist grün im gestimmten Bereich (±5 Cent),
+  orange bis ±15 Cent, darüber rot.
+- **Kammerton:** mit „−“ / „+“ von 415 bis 466 Hz einstellbar (Standard
+  440 Hz, wird gespeichert).
+- Erkannt werden Töne von 27,5 Hz (tiefstes Klavier-A) bis 4,2 kHz, auf
+  deutlich unter 1 Cent genau. Obertonreiche Instrumente wie Gitarre, Bass
+  oder Klavier werden nicht eine Oktave daneben angezeigt.
+- Die Wiedergabe läuft weiter; so lässt sich auch prüfen, wie ein Titel
+  gestimmt ist. Zum Stimmen des eigenen Instruments die Musik besser anhalten,
+  sonst hört das Mikrofon mit.
+- **macOS** fragt beim ersten Einblenden nach dem Mikrofonzugriff. Wurde er
+  abgelehnt: Systemeinstellungen → Datenschutz & Sicherheit → Mikrofon →
+  Mediaplayer erlauben. Unter Windows entsprechend Einstellungen →
+  Datenschutz → Mikrofon („Desktop-Apps den Zugriff erlauben“).
+
 ### Dateiauswahl
 
 Hinzufügen, Laden und Speichern verwenden einen eigenen
@@ -181,6 +210,7 @@ dann nur geladen, nicht automatisch abgespielt).
 | `M` | Markierung an der aktuellen Stelle setzen |
 | `,` / `.` | Zur vorherigen / nächsten Markierung springen |
 | `Umschalt + M` | Nächstgelegene Markierung löschen |
+| `T` | Stimmgerät ein-/ausblenden |
 
 `+`, `-` und `0` funktionieren auch auf dem Ziffernblock und unabhängig vom
 Tastaturlayout (auf US-Tastaturen ist `+` = Umschalt + `=`).
@@ -227,6 +257,8 @@ mediaplayer/
     waveform.py                 Wellenform berechnen
     tempo.py                    TempoController (BPM einstellen, BPM fest, Tap)
     markers.py                  MarkerController (Markierungen setzen, anspringen)
+    pitch.py                    Tonhöhenerkennung und Tonnamen (numpy)
+    tuner.py                    TunerController (Mikrofon, Glättung, Kammerton)
   playlist/
     model.py                    Playlist-Datenmodell (ohne Qt)
     storage.py                  Laden/Speichern von M3U8- und JSON-Playlists
@@ -240,6 +272,7 @@ mediaplayer/
     recent_playlists_dialog.py  Schnellauswahl „Zuletzt“
     widgets.py                  Große Listen, Touch-Scrollen, Dialoggröße
     waveform_slider.py          Positionsregler mit Wellenform
+    tuner_panel.py              Anzeige des Stimmgeräts (Ton, Cent-Skala)
     style.py                    Stylesheet, Klick-springt-Stil für Regler
   selftest.py                   Selbsttest für gepackte Versionen (--selftest)
 tests/
@@ -257,6 +290,10 @@ tools/                          build_windows.ps1, make_icon.py
   (`hold_ms` = ab wann „gehalten“, `double_press_ms` = Doppeldruck-Fenster).
 - Spulgeschwindigkeit, Tempo-Grenzen und -Schritte, Lautstärkeschritte und
   -kurve: Konstanten oben in `mediaplayer/player/playback.py`.
+- Stimmgerät: Ruhe/Reaktion des Zeigers (`SMOOTHING`, `HISTORY`) und
+  Aktualisierungsrate oben in `mediaplayer/player/tuner.py`; Empfindlichkeit
+  (`MIN_LEVEL`, `MIN_CLARITY`) in `mediaplayer/player/pitch.py`; Grenzen für
+  „gestimmt“ (±5 Cent) in `mediaplayer/ui/tuner_panel.py`.
 
 ## Installationspaket
 
@@ -305,4 +342,5 @@ python -m unittest discover -s tests -v
 
 Die Tests prüfen Playlist, Dateiformate, gespeicherte Einstellungen,
 Tastennormalisierung, die Gestenerkennung, die Tastenzuordnung sowie die
-Wiedergaberegeln mit einem echten `QMediaPlayer` (kurze erzeugte WAV-Dateien).
+Wiedergaberegeln mit einem echten `QMediaPlayer` (kurze erzeugte WAV-Dateien)
+sowie die Tonerkennung des Stimmgeräts mit erzeugten Tönen (ohne Mikrofon).
