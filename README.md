@@ -27,6 +27,10 @@ python main.py
 startet den Player ohne Konsolenfenster. Fehlt die virtuelle Umgebung, wird
 sie beim ersten Start automatisch angelegt und PySide6 installiert.
 
+Beim Start erscheint sofort ein Startbildschirm mit Ladefortschritt, bis das
+Hauptfenster bereit ist (der erste Start nach dem Einschalten kann einige
+Sekunden dauern, weil Qt, FFmpeg und numpy geladen werden).
+
 Der Player startet im Vollbild. Mit `python main.py --windowed` startet er
 stattdessen als maximiertes Fenster.
 
@@ -272,6 +276,7 @@ mediaplayer/
     recent_playlists_dialog.py  Schnellauswahl „Zuletzt“
     widgets.py                  Große Listen, Touch-Scrollen, Dialoggröße
     waveform_slider.py          Positionsregler mit Wellenform
+    splash.py                   Startbildschirm mit Ladefortschritt
     tuner_panel.py              Anzeige des Stimmgeräts (Ton, Cent-Skala)
     style.py                    Stylesheet, Klick-springt-Stil für Regler
   selftest.py                   Selbsttest für gepackte Versionen (--selftest)

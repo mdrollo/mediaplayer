@@ -1229,6 +1229,44 @@ class TunerTests(unittest.TestCase):
             wait(100)
 
 
+class SplashTests(unittest.TestCase):
+    def test_splash_steps_and_closes_with_window(self):
+        from mediaplayer.ui.splash import SplashScreen
+
+        splash = SplashScreen("Mediaplayer", "1.0.0", str(Path(__file__).resolve().parents[1] / "assets" / "icon.png"))
+        splash.show()
+        splash.set_step("Programm wird geladen …", 0.1)
+        self.assertTrue(splash.isVisible())
+        self.assertEqual(splash.status(), "Programm wird geladen …")
+        splash.set_step("zu viel", 3.0)
+        self.assertEqual(splash.progress(), 1.0)  # begrenzt
+        self.assertFalse(splash.grab().isNull())
+
+        window = QWidget()
+        window.show()
+        splash.finish(window)
+        wait(100)
+        self.assertFalse(splash.isVisible())
+        window.close()
+        splash.deleteLater()
+
+    def test_splash_loads_without_heavy_modules(self):
+        """Der Startbildschirm darf Qt Multimedia, numpy und das Hauptfenster nicht vorab laden."""
+        import subprocess
+
+        code = (
+            "import sys; import mediaplayer.app; "
+            "print(','.join(m for m in ('numpy', 'PySide6.QtMultimedia', 'mediaplayer.ui.main_window') "
+            "if m in sys.modules))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code], cwd=Path(__file__).resolve().parents[1],
+            capture_output=True, text=True, timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "")
+
+
 def tearDownModule():
     """Alle Qt-Objekte abbauen, solange die QApplication noch existiert.
 
