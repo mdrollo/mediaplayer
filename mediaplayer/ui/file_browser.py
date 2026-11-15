@@ -8,6 +8,8 @@ Drei Modi:
 * ``OPEN_FILE``  – genau eine Datei öffnen.
 * ``SAVE_FILE``  – Ordner wählen und Dateinamen eingeben.
 
+Mit ``embedded=True`` dient der Dialog als Seite im Dialog „Playlist laden“.
+
 Ordner öffnen sich mit einem einfachen Antippen/Klick.
 """
 
@@ -87,8 +89,12 @@ class FileBrowserDialog(QDialog):
         parent=None,
         default_name: str = "",
         default_suffix: str = "",
+        embedded: bool = False,
     ):
         super().__init__(parent)
+        if embedded:
+            # Als Seite im Dialog „Playlist laden“: ohne eigene Überschrift und Fenstergröße.
+            self.setWindowFlags(Qt.WindowType.Widget)
         self.setWindowTitle(title)
         self.setModal(True)
         self._mode = mode
@@ -99,12 +105,14 @@ class FileBrowserDialog(QDialog):
         self._result: list[str] = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(px(32), px(26), px(32), px(26))
+        margin = 0 if embedded else px(32)
+        layout.setContentsMargins(margin, 0 if embedded else px(26), margin, 0 if embedded else px(26))
         layout.setSpacing(px(16))
 
-        heading = QLabel(title)
-        heading.setObjectName("dialogTitle")
-        layout.addWidget(heading)
+        if not embedded:
+            heading = QLabel(title)
+            heading.setObjectName("dialogTitle")
+            layout.addWidget(heading)
 
         # --- Orte
         places = QHBoxLayout()
@@ -176,7 +184,8 @@ class FileBrowserDialog(QDialog):
         buttons.addWidget(self.accept_button)
         layout.addLayout(buttons)
 
-        size_dialog(self, parent, 0.9, fullscreen_like_parent=True)
+        if not embedded:
+            size_dialog(self, parent, 0.9, fullscreen_like_parent=True)
 
         start = start_dir if start_dir and Path(start_dir).is_dir() else QDir.homePath()
         self.navigate(start)

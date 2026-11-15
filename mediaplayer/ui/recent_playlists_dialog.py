@@ -25,10 +25,17 @@ class RecentPlaylistsDialog(QDialog):
     Bedienung: antippen + „Laden“, Doppelklick, Eingabetaste oder die Ziffern
     1–9 laden direkt. Die Taste, mit der das Panel geöffnet wurde
     (``toggle_keys``), schließt es wieder.
+
+    Mit ``embedded=True`` ist es eine Seite im Dialog „Playlist laden“
+    (ohne eigene Überschrift und Fenstergröße).
     """
 
-    def __init__(self, paths: list[str], toggle_keys: list[str] | None = None, parent=None):
+    def __init__(
+        self, paths: list[str], toggle_keys: list[str] | None = None, parent=None, embedded: bool = False
+    ):
         super().__init__(parent)
+        if embedded:
+            self.setWindowFlags(Qt.WindowType.Widget)
         self.setWindowTitle("Zuletzt verwendete Playlists")
         self.setModal(True)
         self._paths = list(paths)
@@ -36,12 +43,14 @@ class RecentPlaylistsDialog(QDialog):
         self._chosen = ""
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(px(32), px(26), px(32), px(26))
+        margin = 0 if embedded else px(32)
+        layout.setContentsMargins(margin, 0 if embedded else px(26), margin, 0 if embedded else px(26))
         layout.setSpacing(px(16))
 
-        heading = QLabel("Zuletzt verwendete Playlists")
-        heading.setObjectName("dialogTitle")
-        layout.addWidget(heading)
+        if not embedded:
+            heading = QLabel("Zuletzt verwendete Playlists")
+            heading.setObjectName("dialogTitle")
+            layout.addWidget(heading)
 
         self.list = BigListWidget(self)
         self.list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -70,7 +79,8 @@ class RecentPlaylistsDialog(QDialog):
         buttons.addWidget(self.load_button)
         layout.addLayout(buttons)
 
-        size_dialog(self, parent, 0.7, fullscreen_like_parent=False)
+        if not embedded:
+            size_dialog(self, parent, 0.7, fullscreen_like_parent=False)
         self._populate()
         self.list.setFocus()
 

@@ -27,6 +27,10 @@ python main.py
 startet den Player ohne Konsolenfenster. Fehlt die virtuelle Umgebung, wird
 sie beim ersten Start automatisch angelegt und PySide6 installiert.
 
+Beim Start erscheint sofort ein Startbildschirm mit Ladefortschritt, bis das
+Hauptfenster bereit ist (der erste Start nach dem Einschalten kann einige
+Sekunden dauern, weil Qt, FFmpeg und numpy geladen werden).
+
 Der Player startet im Vollbild. Mit `python main.py --windowed` startet er
 stattdessen als maximiertes Fenster.
 
@@ -34,7 +38,7 @@ stattdessen als maximiertes Fenster.
 
 Unter Kopfzeile und Positionsregler ist das Fenster zweigeteilt: links die
 Playlist über die volle Höhe, rechts das Bedienfeld mit Wiedergabe,
-Lautstärke, Tempo und Markierungen. Über der Playlist lässt sich ein
+Lautstärke, Tempo, Markierungen und der Notiz zum Titel. Über der Playlist lässt sich ein
 chromatisches Stimmgerät einblenden.
 
 | Element | Funktion |
@@ -45,12 +49,14 @@ chromatisches Stimmgerät einblenden.
 | Pausen überspringen | Stille am Anfang und Ende der Titel überspringen (Standard: an; blau = aktiv) |
 | Lautstärkeregler | 0–100 %, gehörrichtig (logarithmisch) skaliert |
 | Tempo | Anzeige und Einstellung in **BPM** (siehe unten). Ist das Tempo eines Titels unbekannt, wie bisher 0,50x – 2,00x in 0,01-Schritten. „1,00x“ = Originaltempo |
-| Playlist | Doppelklick oder Eingabetaste startet einen Titel; ▶ und Fettschrift markieren den aktuellen Titel |
+| Playlist | Doppelklick oder Eingabetaste startet einen Titel; ▶ und Fettschrift markieren den aktuellen Titel, ✎ zeigt Titel mit Notiz (Notiz als Tooltip) |
+| Notiz (unten im Bedienfeld) | Notiz zum laufenden – oder, wenn nichts läuft, zum markierten – Titel. Antippen (oder Taste `N`) öffnet die Bearbeitung, siehe unten |
 | Hinzufügen | Audiodateien auswählen (Dateien/Ordner können auch ins Fenster gezogen werden) |
 | Entfernen | Markierten Titel aus der Playlist entfernen |
 | Mischen | Reihenfolge einmal zufällig durchmischen. Der aktuelle Titel rückt nach oben und spielt ungestört weiter. Die gemischte Reihenfolge wird nicht gespeichert – beim nächsten Start gilt wieder die ursprüngliche (außer man speichert sie bewusst mit „Speichern“) |
-| Laden / Speichern | `.m3u8`/`.m3u` (auch für andere Player) oder `.json` |
-| Zuletzt | Schnellauswahl der 10 zuletzt geladenen oder gespeicherten Playlists (Taste `L`). Antippen + „Laden“, Doppelklick, Eingabetaste oder Ziffern 1–9; nicht mehr vorhandene Playlists erscheinen grau und lassen sich mit „Aus Liste entfernen“ (oder Entf) löschen. `L` schließt das Panel wieder |
+| Neu | Neue, leere Playlist beginnen (mit Rückfrage, wenn die aktuelle Titel enthält). Danach Titel mit „Hinzufügen“ einfügen und mit „Speichern“ unter einem Namen sichern |
+| Laden | Ein Dialog mit zwei Seiten, umschaltbar über die Schaltflächen oben rechts oder die Tabulatortaste: **Zuletzt verwendet** (Schnellauswahl der 10 zuletzt geladenen oder gespeicherten Playlists) und **Datei auswählen** (beliebige Playlist-Datei). Er öffnet bei „Zuletzt verwendet“, solange es dort Einträge gibt; dort laden Antippen + „Laden“, Doppelklick, Eingabetaste oder die Ziffern 1–9, nicht mehr vorhandene Playlists erscheinen grau und lassen sich mit „Aus Liste entfernen“ (oder Entf) löschen. Taste `L` öffnet den Dialog direkt bei „Zuletzt verwendet“ und schließt ihn wieder |
+| Speichern | `.m3u8`/`.m3u` (auch für andere Player) oder `.json` |
 | Stimmgerät | Chromatisches Stimmgerät über der Playlist ein-/ausblenden (Taste `T`, siehe unten) |
 | Tastatur | Tastaturbelegung konfigurieren |
 | Beenden | Programm schließen |
@@ -133,6 +139,21 @@ eines Refrains, und springst später direkt dorthin.
   werden pro Datei gespeichert (`markers.json` neben der Einstellungsdatei) und
   gelten unabhängig vom eingestellten Tempo.
 
+### Notizen
+
+Zu jedem Titel lässt sich eine Notiz schreiben, z. B. Tonart, Capo, Einsätze,
+Text-Hänger oder Tempo-Hinweise.
+
+- Die Notiz des laufenden Titels steht unten im Bedienfeld (lange Notizen
+  werden dort abgeschnitten). Läuft kein Titel, gilt der in der Playlist
+  markierte.
+- **Bearbeiten:** Notiz antippen oder Taste `N` → Text eingeben →
+  „Speichern“ (oder Strg + Eingabe). „Abbrechen“/Escape verwirft die
+  Änderung, „Leeren“ + „Speichern“ löscht die Notiz.
+- Titel mit Notiz tragen in der Playlist ein ✎; der Tooltip zeigt den Text.
+- Notizen werden pro Datei gespeichert (`notes.json` neben der
+  Einstellungsdatei) und gelten in jeder Playlist, in der der Titel vorkommt.
+
 ### Stimmgerät
 
 Chromatisches Stimmgerät für jedes Instrument (und die Stimme): Es erkennt den
@@ -206,11 +227,12 @@ dann nur geladen, nicht automatisch abgespielt).
 | Pfeil hoch / runter | Lauter / leiser (5 %-Schritte) |
 | `+` / `-` | Tempo ±1 BPM (ohne bekanntes Tempo ±0,01x); gedrückt halten läuft weiter |
 | `0` | Originaltempo (1,0x) |
-| `L` | Zuletzt verwendete Playlists öffnen/schließen |
+| `L` | „Playlist laden“ bei „Zuletzt verwendet“ öffnen/schließen |
 | `M` | Markierung an der aktuellen Stelle setzen |
 | `,` / `.` | Zur vorherigen / nächsten Markierung springen |
 | `Umschalt + M` | Nächstgelegene Markierung löschen |
 | `T` | Stimmgerät ein-/ausblenden |
+| `N` | Notiz zum Titel bearbeiten |
 
 `+`, `-` und `0` funktionieren auch auf dem Ziffernblock und unabhängig vom
 Tastaturlayout (auf US-Tastaturen ist `+` = Umschalt + `=`).
@@ -269,10 +291,13 @@ mediaplayer/
     main_window.py              Hauptfenster
     key_config_dialog.py        Dialog „Tastatur“
     file_browser.py             Eigener großer Dateidialog
-    recent_playlists_dialog.py  Schnellauswahl „Zuletzt“
+    load_playlist_dialog.py     Dialog „Playlist laden“ (Zuletzt + Dateiauswahl)
+    recent_playlists_dialog.py  Seite „Zuletzt verwendet“
     widgets.py                  Große Listen, Touch-Scrollen, Dialoggröße
     waveform_slider.py          Positionsregler mit Wellenform
+    splash.py                   Startbildschirm mit Ladefortschritt
     tuner_panel.py              Anzeige des Stimmgeräts (Ton, Cent-Skala)
+    notes_dialog.py             Dialog zum Bearbeiten der Notiz eines Titels
     style.py                    Stylesheet, Klick-springt-Stil für Regler
   selftest.py                   Selbsttest für gepackte Versionen (--selftest)
 tests/

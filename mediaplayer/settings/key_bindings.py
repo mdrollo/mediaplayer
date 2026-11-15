@@ -28,6 +28,7 @@ MARKER_PREVIOUS = "marker_previous"
 MARKER_NEXT = "marker_next"
 MARKER_DELETE = "marker_delete"
 TUNER = "tuner"
+NOTES = "notes"
 
 ACTIONS = [
     BACK,
@@ -44,6 +45,7 @@ ACTIONS = [
     MARKER_NEXT,
     MARKER_DELETE,
     TUNER,
+    NOTES,
 ]
 
 ACTION_LABELS = {
@@ -55,12 +57,13 @@ ACTION_LABELS = {
     SPEED_UP: "Tempo erhöhen (+1 BPM)",
     SPEED_DOWN: "Tempo verringern (−1 BPM)",
     SPEED_RESET: "Originaltempo (1,0x)",
-    RECENT_PLAYLISTS: "Zuletzt verwendete Playlists",
+    RECENT_PLAYLISTS: "Playlist laden (zuletzt verwendete)",
     MARKER_SET: "Markierung setzen",
     MARKER_PREVIOUS: "Zur vorherigen Markierung",
     MARKER_NEXT: "Zur nächsten Markierung",
     MARKER_DELETE: "Nächstgelegene Markierung löschen",
     TUNER: "Stimmgerät ein-/ausblenden",
+    NOTES: "Notiz zum Titel bearbeiten",
 }
 
 # Zusätzliche Erklärung für Aktionen mit Sonderverhalten (im Dialog angezeigt).
@@ -89,6 +92,7 @@ DEFAULT_BINDINGS = {
     MARKER_NEXT: [".", ""],
     MARKER_DELETE: ["Shift+M", ""],
     TUNER: ["T", ""],
+    NOTES: ["N", ""],
 }
 
 

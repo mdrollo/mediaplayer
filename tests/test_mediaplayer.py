@@ -1229,6 +1229,228 @@ class TunerTests(unittest.TestCase):
             wait(100)
 
 
+class SplashTests(unittest.TestCase):
+    def test_splash_steps_and_closes_with_window(self):
+        from mediaplayer.ui.splash import SplashScreen
+
+        splash = SplashScreen("Mediaplayer", "1.0.0", str(Path(__file__).resolve().parents[1] / "assets" / "icon.png"))
+        splash.show()
+        splash.set_step("Programm wird geladen …", 0.1)
+        self.assertTrue(splash.isVisible())
+        self.assertEqual(splash.status(), "Programm wird geladen …")
+        splash.set_step("zu viel", 3.0)
+        self.assertEqual(splash.progress(), 1.0)  # begrenzt
+        self.assertFalse(splash.grab().isNull())
+
+        window = QWidget()
+        window.show()
+        splash.finish(window)
+        wait(100)
+        self.assertFalse(splash.isVisible())
+        window.close()
+        splash.deleteLater()
+
+    def test_splash_loads_without_heavy_modules(self):
+        """Der Startbildschirm darf Qt Multimedia, numpy und das Hauptfenster nicht vorab laden."""
+        import subprocess
+
+        code = (
+            "import sys; import mediaplayer.app; "
+            "print(','.join(m for m in ('numpy', 'PySide6.QtMultimedia', 'mediaplayer.ui.main_window') "
+            "if m in sys.modules))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code], cwd=Path(__file__).resolve().parents[1],
+            capture_output=True, text=True, timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "")
+
+
+class NotesTests(unittest.TestCase):
+    """Notizen zu Titeln: Speicherung, Anzeige im Hauptfenster, Bearbeiten."""
+
+    def test_store_and_reload(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            d = Path(tmp)
+            song = str(make_wav(d / "lied.wav", 0.1))
+            settings = AppSettings(QSettings(str(d / "s.ini"), QSettings.Format.IniFormat))
+            self.assertEqual(settings.note(song), "")
+            self.assertTrue(settings.set_note(song, "  Capo 2\nÄnderung: Schluss langsamer  "))
+            # Neue Instanz liest aus notes.json; Leerraum am Rand wird entfernt.
+            again = AppSettings(QSettings(str(d / "s.ini"), QSettings.Format.IniFormat))
+            self.assertEqual(again.note(song), "Capo 2\nÄnderung: Schluss langsamer")
+            self.assertEqual(again.note(str(d / "." / "lied.wav")), again.note(song))  # gleicher Schlüssel
+            again.set_note(song, "   ")  # leer = löschen
+            self.assertEqual(AppSettings(QSettings(str(d / "s.ini"), QSettings.Format.IniFormat)).note(song), "")
+
+    def test_main_window_preview_and_edit(self):
+        import mediaplayer.ui.main_window as mw
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            d = Path(tmp)
+            songs = [str(make_wav(d / f"s{i}.wav", 0.2)) for i in range(2)]
+            settings = AppSettings(QSettings(str(d / "s.ini"), QSettings.Format.IniFormat))
+            settings.set_note(songs[1], "Einsatz nach 4 Takten")
+            settings.set_session_playlist(songs, 0)
+            w = mw.MainWindow(settings)
+            w.resize(1600, 900)
+            w.show()
+            wait(100)
+
+            # ✎ in der Playlist nur beim Titel mit Notiz.
+            self.assertNotIn("✎", w.playlist_view.item(0).text())
+            self.assertIn("✎", w.playlist_view.item(1).text())
+            self.assertIn("Einsatz nach 4 Takten", w.playlist_view.item(1).toolTip())
+            self.assertTrue(w.note_preview.property("empty"))  # Titel 1 ohne Notiz
+
+            # Notiz zum laufenden Titel schreiben (Dialog durch Attrappe ersetzt).
+            class FakeDialog:
+                answer = "Neue Notiz"
+                seen = None
+
+                def __init__(self, title, text, parent):
+                    FakeDialog.seen = (title, text)
+
+                def exec(self):
+                    return True
+
+                def text(self):
+                    return FakeDialog.answer
+
+            original = mw.NotesDialog
+            mw.NotesDialog = FakeDialog
+            try:
+                w.controller.play_index(0)
+                wait(50)
+                app.sendEvent(w.playlist_view, key_event(QEvent.Type.KeyPress, Qt.Key.Key_N, text="n"))
+                wait(50)  # Taste N öffnet verzögert
+                self.assertEqual(FakeDialog.seen, ("s0", ""))
+                self.assertEqual(settings.note(songs[0]), "Neue Notiz")
+                self.assertIn("✎", w.playlist_view.item(0).text())
+                self.assertIn("Neue Notiz", w.note_preview.text())
+                self.assertFalse(w.note_preview.property("empty"))
+
+                FakeDialog.answer = ""  # leeren = löschen
+                w.note_preview.clicked.emit()
+                self.assertEqual(settings.note(songs[0]), "")
+                self.assertNotIn("✎", w.playlist_view.item(0).text())
+                self.assertIn("gelöscht", w.message_label.text())
+            finally:
+                mw.NotesDialog = original
+            w.controller.stop()
+            w.close()
+            w.deleteLater()
+            wait(100)
+
+    def test_dialog_text(self):
+        from mediaplayer.ui.notes_dialog import NotesDialog
+
+        dlg = NotesDialog("Lied", "alt", None)
+        self.assertEqual(dlg.text(), "alt")
+        dlg.clear_button.click()
+        self.assertEqual(dlg.text(), "")
+        dlg.editor.setPlainText("  neu \n")
+        self.assertEqual(dlg.text(), "neu")
+        dlg.deleteLater()
+
+
+class LoadAndNewPlaylistTests(unittest.TestCase):
+    """Dialog „Playlist laden“ (Zuletzt + Dateiauswahl) und „Neu“."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.dir = Path(self.tmp.name)
+        self.songs = [str(make_wav(self.dir / f"s{i}.wav", 0.2)) for i in range(2)]
+        self.lists = [str(save_playlist_file(self.dir / f"{n}.m3u8", self.songs)) for n in ("Probe", "Gig")]
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def dialog(self, recent, page=None):
+        from mediaplayer.ui.load_playlist_dialog import LoadPlaylistDialog
+
+        dlg = LoadPlaylistDialog(recent, str(self.dir), page=page, toggle_keys=["L", ""])
+        dlg.show()
+        wait(30)
+        return dlg
+
+    def test_start_page_and_switching(self):
+        from mediaplayer.ui.load_playlist_dialog import FILES_PAGE, RECENT_PAGE
+
+        dlg = self.dialog(self.lists)
+        self.assertEqual(dlg.page(), RECENT_PAGE)       # mit Einträgen: „Zuletzt“ zuerst
+        self.assertTrue(dlg.recent_tab.isChecked())
+        app.sendEvent(dlg.recent.list, key_event(QEvent.Type.KeyPress, Qt.Key.Key_Tab))
+        self.assertEqual(dlg.page(), FILES_PAGE)        # Tab wechselt
+        self.assertTrue(dlg.files_tab.isChecked())
+        dlg.recent_tab.click()                          # Umschalter ebenso
+        self.assertEqual(dlg.page(), RECENT_PAGE)
+        dlg.reject()
+
+        empty = self.dialog([])
+        self.assertEqual(empty.page(), FILES_PAGE)      # ohne Einträge gleich die Dateiauswahl
+        empty.reject()
+
+    def test_choose_from_recent_and_close_key(self):
+        dlg = self.dialog(self.lists)
+        app.sendEvent(dlg.recent.list, key_event(QEvent.Type.KeyPress, Qt.Key.Key_2, text="2"))
+        self.assertEqual(dlg.result(), QDialog.DialogCode.Accepted)
+        self.assertEqual(dlg.chosen_path(), self.lists[1])
+
+        dlg = self.dialog(self.lists)
+        dlg.recent.list.setCurrentRow(0)
+        dlg.recent.remove_button.click()                # Entfernen bleibt erhalten
+        app.sendEvent(dlg.recent.list, key_event(QEvent.Type.KeyPress, Qt.Key.Key_L, text="l"))
+        self.assertEqual(dlg.result(), QDialog.DialogCode.Rejected)
+        self.assertEqual(dlg.remaining_recent_paths(), [self.lists[1]])
+        self.assertEqual(dlg.chosen_path(), "")
+
+    def test_choose_file(self):
+        from mediaplayer.ui.load_playlist_dialog import FILES_PAGE
+
+        dlg = self.dialog([], page=FILES_PAGE)
+        names = [dlg.files.list.item(i).text() for i in range(dlg.files.list.count())]
+        self.assertIn("Probe.m3u8", names)
+        self.assertNotIn("s0.wav", names)               # nur Playlists
+        dlg.files.list.item(names.index("Probe.m3u8")).setSelected(True)
+        dlg.files.accept_button.click()
+        self.assertEqual(dlg.result(), QDialog.DialogCode.Accepted)
+        self.assertEqual(Path(dlg.chosen_path()).name, "Probe.m3u8")
+
+    def test_new_playlist(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        from mediaplayer.ui.main_window import MainWindow
+
+        settings = AppSettings(QSettings(str(self.dir / "s.ini"), QSettings.Format.IniFormat))
+        w = MainWindow(settings)
+        w.resize(1600, 900)
+        w.show()
+        w.open_playlist_file(self.lists[0])
+        wait(50)
+        self.assertEqual(len(w.controller.playlist), 2)
+
+        original = QMessageBox.question
+        try:
+            QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.StandardButton.No)
+            w.new_playlist()                            # Rückfrage abgelehnt: nichts passiert
+            self.assertEqual(len(w.controller.playlist), 2)
+            QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
+            w.new_playlist()
+        finally:
+            QMessageBox.question = original
+        self.assertEqual(len(w.controller.playlist), 0)
+        self.assertEqual(w.playlist_title.full_text(), "")
+        self.assertEqual(w.playlist_view.count(), 0)
+        self.assertEqual(settings.session_playlist(), ([], -1))
+        self.assertEqual(settings.recent_playlists()[0], self.lists[0])  # bleibt in „Zuletzt“
+        w.new_playlist()                                # leer: keine Rückfrage nötig
+        w.close()
+        w.deleteLater()
+        wait(100)
+
+
 def tearDownModule():
     """Alle Qt-Objekte abbauen, solange die QApplication noch existiert.
 
