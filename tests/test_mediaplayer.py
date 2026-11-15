@@ -1355,6 +1355,102 @@ class NotesTests(unittest.TestCase):
         dlg.deleteLater()
 
 
+class LoadAndNewPlaylistTests(unittest.TestCase):
+    """Dialog „Playlist laden“ (Zuletzt + Dateiauswahl) und „Neu“."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.dir = Path(self.tmp.name)
+        self.songs = [str(make_wav(self.dir / f"s{i}.wav", 0.2)) for i in range(2)]
+        self.lists = [str(save_playlist_file(self.dir / f"{n}.m3u8", self.songs)) for n in ("Probe", "Gig")]
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def dialog(self, recent, page=None):
+        from mediaplayer.ui.load_playlist_dialog import LoadPlaylistDialog
+
+        dlg = LoadPlaylistDialog(recent, str(self.dir), page=page, toggle_keys=["L", ""])
+        dlg.show()
+        wait(30)
+        return dlg
+
+    def test_start_page_and_switching(self):
+        from mediaplayer.ui.load_playlist_dialog import FILES_PAGE, RECENT_PAGE
+
+        dlg = self.dialog(self.lists)
+        self.assertEqual(dlg.page(), RECENT_PAGE)       # mit Einträgen: „Zuletzt“ zuerst
+        self.assertTrue(dlg.recent_tab.isChecked())
+        app.sendEvent(dlg.recent.list, key_event(QEvent.Type.KeyPress, Qt.Key.Key_Tab))
+        self.assertEqual(dlg.page(), FILES_PAGE)        # Tab wechselt
+        self.assertTrue(dlg.files_tab.isChecked())
+        dlg.recent_tab.click()                          # Umschalter ebenso
+        self.assertEqual(dlg.page(), RECENT_PAGE)
+        dlg.reject()
+
+        empty = self.dialog([])
+        self.assertEqual(empty.page(), FILES_PAGE)      # ohne Einträge gleich die Dateiauswahl
+        empty.reject()
+
+    def test_choose_from_recent_and_close_key(self):
+        dlg = self.dialog(self.lists)
+        app.sendEvent(dlg.recent.list, key_event(QEvent.Type.KeyPress, Qt.Key.Key_2, text="2"))
+        self.assertEqual(dlg.result(), QDialog.DialogCode.Accepted)
+        self.assertEqual(dlg.chosen_path(), self.lists[1])
+
+        dlg = self.dialog(self.lists)
+        dlg.recent.list.setCurrentRow(0)
+        dlg.recent.remove_button.click()                # Entfernen bleibt erhalten
+        app.sendEvent(dlg.recent.list, key_event(QEvent.Type.KeyPress, Qt.Key.Key_L, text="l"))
+        self.assertEqual(dlg.result(), QDialog.DialogCode.Rejected)
+        self.assertEqual(dlg.remaining_recent_paths(), [self.lists[1]])
+        self.assertEqual(dlg.chosen_path(), "")
+
+    def test_choose_file(self):
+        from mediaplayer.ui.load_playlist_dialog import FILES_PAGE
+
+        dlg = self.dialog([], page=FILES_PAGE)
+        names = [dlg.files.list.item(i).text() for i in range(dlg.files.list.count())]
+        self.assertIn("Probe.m3u8", names)
+        self.assertNotIn("s0.wav", names)               # nur Playlists
+        dlg.files.list.item(names.index("Probe.m3u8")).setSelected(True)
+        dlg.files.accept_button.click()
+        self.assertEqual(dlg.result(), QDialog.DialogCode.Accepted)
+        self.assertEqual(Path(dlg.chosen_path()).name, "Probe.m3u8")
+
+    def test_new_playlist(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        from mediaplayer.ui.main_window import MainWindow
+
+        settings = AppSettings(QSettings(str(self.dir / "s.ini"), QSettings.Format.IniFormat))
+        w = MainWindow(settings)
+        w.resize(1600, 900)
+        w.show()
+        w.open_playlist_file(self.lists[0])
+        wait(50)
+        self.assertEqual(len(w.controller.playlist), 2)
+
+        original = QMessageBox.question
+        try:
+            QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.StandardButton.No)
+            w.new_playlist()                            # Rückfrage abgelehnt: nichts passiert
+            self.assertEqual(len(w.controller.playlist), 2)
+            QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
+            w.new_playlist()
+        finally:
+            QMessageBox.question = original
+        self.assertEqual(len(w.controller.playlist), 0)
+        self.assertEqual(w.playlist_title.full_text(), "")
+        self.assertEqual(w.playlist_view.count(), 0)
+        self.assertEqual(settings.session_playlist(), ([], -1))
+        self.assertEqual(settings.recent_playlists()[0], self.lists[0])  # bleibt in „Zuletzt“
+        w.new_playlist()                                # leer: keine Rückfrage nötig
+        w.close()
+        w.deleteLater()
+        wait(100)
+
+
 def tearDownModule():
     """Alle Qt-Objekte abbauen, solange die QApplication noch existiert.
 

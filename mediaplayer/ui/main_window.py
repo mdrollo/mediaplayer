@@ -48,7 +48,7 @@ from ..settings import key_bindings as kb
 from .file_browser import FileBrowserDialog
 from .key_config_dialog import KeyConfigDialog
 from .notes_dialog import NotesDialog
-from .recent_playlists_dialog import RecentPlaylistsDialog
+from .load_playlist_dialog import RECENT_PAGE, LoadPlaylistDialog
 from .tuner_panel import TunerPanel
 from .style import BUTTON_HEIGHT, ICON_SIZE, TRANSPORT_HEIGHT, px
 from .waveform_slider import WaveformSlider
@@ -369,8 +369,9 @@ class MainWindow(QMainWindow):
             ("Hinzufügen", "Audiodateien hinzufügen", self.add_files),
             ("Entfernen", "Markierten Titel entfernen", self.remove_selected),
             ("Mischen", "Reihenfolge einmal zufällig mischen (wird nicht gespeichert)", self.shuffle_playlist),
-            ("Laden", "Playlist-Datei laden", self.load_playlist),
-            ("Zuletzt", "Zuletzt verwendete Playlists (Schnellauswahl)", self.show_recent_playlists),
+            ("Neu", "Neue, leere Playlist beginnen", self.new_playlist),
+            ("Laden", "Playlist laden: zuletzt verwendete oder Datei auswählen (Taste L)",
+             lambda: self.load_playlist()),
             ("Speichern", "Playlist-Datei speichern", self.save_playlist),
         ):
             button = self._make_text_button(text, tooltip, slot)
@@ -800,25 +801,43 @@ class MainWindow(QMainWindow):
         self._set_playlist_file(str(saved))
         self.show_message(f"Playlist gespeichert: {saved.name}")
 
-    def load_playlist(self) -> None:
-        path = self._run_modal(lambda: FileBrowserDialog.get_open_file(
-            self, "Playlist laden", self._start_directory(), PLAYLIST_EXTENSIONS, "Laden"
-        ))
-        if path:
-            self.open_playlist_file(path)
+    def new_playlist(self) -> None:
+        """Leere Playlist beginnen (nach Rückfrage, wenn die aktuelle Titel enthält)."""
+        count = len(self.controller.playlist)
+        if count:
+            name = self.playlist_title.full_text()
+            current = f"„{name}“ ({count} Titel)" if name else f"die aktuelle Playlist ({count} Titel)"
+            answer = self._run_modal(lambda: QMessageBox.question(
+                self, "Neue Playlist",
+                f"Neue, leere Playlist beginnen?\n\n{current} wird geschlossen; "
+                "nicht gespeicherte Änderungen gehen verloren.",
+            ))
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        self.controller.replace_playlist([])
+        self._set_playlist_file("")
+        self._save_session()
+        self.show_message("Neue Playlist – Titel mit „Hinzufügen“ einfügen, dann „Speichern“.")
 
-    def show_recent_playlists(self) -> None:
+    def load_playlist(self, page: int | None = None) -> None:
+        """Dialog „Playlist laden“; ohne ``page`` startet er bei „Zuletzt verwendet“, falls vorhanden."""
         if not self.keyboard.is_enabled():
             return  # es ist bereits ein Dialog offen
-        dialog = RecentPlaylistsDialog(
+        dialog = LoadPlaylistDialog(
             self.settings.recent_playlists(),
+            self._start_directory(),
+            page=page,
             toggle_keys=self.settings.key_bindings()[kb.RECENT_PLAYLISTS],
             parent=self,
         )
         accepted = self._run_modal(dialog.exec)
-        self.settings.set_recent_playlists(dialog.remaining_paths())
+        self.settings.set_recent_playlists(dialog.remaining_recent_paths())
         if accepted and dialog.chosen_path():
             self.open_playlist_file(dialog.chosen_path())
+
+    def show_recent_playlists(self) -> None:
+        """Taste L: Laden-Dialog direkt bei „Zuletzt verwendet“ (L schließt ihn wieder)."""
+        self.load_playlist(RECENT_PAGE)
 
     def open_playlist_file(self, path: str) -> None:
         try:

@@ -54,8 +54,9 @@ chromatisches Stimmgerät einblenden.
 | Hinzufügen | Audiodateien auswählen (Dateien/Ordner können auch ins Fenster gezogen werden) |
 | Entfernen | Markierten Titel aus der Playlist entfernen |
 | Mischen | Reihenfolge einmal zufällig durchmischen. Der aktuelle Titel rückt nach oben und spielt ungestört weiter. Die gemischte Reihenfolge wird nicht gespeichert – beim nächsten Start gilt wieder die ursprüngliche (außer man speichert sie bewusst mit „Speichern“) |
-| Laden / Speichern | `.m3u8`/`.m3u` (auch für andere Player) oder `.json` |
-| Zuletzt | Schnellauswahl der 10 zuletzt geladenen oder gespeicherten Playlists (Taste `L`). Antippen + „Laden“, Doppelklick, Eingabetaste oder Ziffern 1–9; nicht mehr vorhandene Playlists erscheinen grau und lassen sich mit „Aus Liste entfernen“ (oder Entf) löschen. `L` schließt das Panel wieder |
+| Neu | Neue, leere Playlist beginnen (mit Rückfrage, wenn die aktuelle Titel enthält). Danach Titel mit „Hinzufügen“ einfügen und mit „Speichern“ unter einem Namen sichern |
+| Laden | Ein Dialog mit zwei Seiten, umschaltbar über die Schaltflächen oben rechts oder die Tabulatortaste: **Zuletzt verwendet** (Schnellauswahl der 10 zuletzt geladenen oder gespeicherten Playlists) und **Datei auswählen** (beliebige Playlist-Datei). Er öffnet bei „Zuletzt verwendet“, solange es dort Einträge gibt; dort laden Antippen + „Laden“, Doppelklick, Eingabetaste oder die Ziffern 1–9, nicht mehr vorhandene Playlists erscheinen grau und lassen sich mit „Aus Liste entfernen“ (oder Entf) löschen. Taste `L` öffnet den Dialog direkt bei „Zuletzt verwendet“ und schließt ihn wieder |
+| Speichern | `.m3u8`/`.m3u` (auch für andere Player) oder `.json` |
 | Stimmgerät | Chromatisches Stimmgerät über der Playlist ein-/ausblenden (Taste `T`, siehe unten) |
 | Tastatur | Tastaturbelegung konfigurieren |
 | Beenden | Programm schließen |
@@ -226,7 +227,7 @@ dann nur geladen, nicht automatisch abgespielt).
 | Pfeil hoch / runter | Lauter / leiser (5 %-Schritte) |
 | `+` / `-` | Tempo ±1 BPM (ohne bekanntes Tempo ±0,01x); gedrückt halten läuft weiter |
 | `0` | Originaltempo (1,0x) |
-| `L` | Zuletzt verwendete Playlists öffnen/schließen |
+| `L` | „Playlist laden“ bei „Zuletzt verwendet“ öffnen/schließen |
 | `M` | Markierung an der aktuellen Stelle setzen |
 | `,` / `.` | Zur vorherigen / nächsten Markierung springen |
 | `Umschalt + M` | Nächstgelegene Markierung löschen |
@@ -290,7 +291,8 @@ mediaplayer/
     main_window.py              Hauptfenster
     key_config_dialog.py        Dialog „Tastatur“
     file_browser.py             Eigener großer Dateidialog
-    recent_playlists_dialog.py  Schnellauswahl „Zuletzt“
+    load_playlist_dialog.py     Dialog „Playlist laden“ (Zuletzt + Dateiauswahl)
+    recent_playlists_dialog.py  Seite „Zuletzt verwendet“
     widgets.py                  Große Listen, Touch-Scrollen, Dialoggröße
     waveform_slider.py          Positionsregler mit Wellenform
     splash.py                   Startbildschirm mit Ladefortschritt

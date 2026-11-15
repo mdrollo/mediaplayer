@@ -57,7 +57,7 @@ ACTION_LABELS = {
     SPEED_UP: "Tempo erhöhen (+1 BPM)",
     SPEED_DOWN: "Tempo verringern (−1 BPM)",
     SPEED_RESET: "Originaltempo (1,0x)",
-    RECENT_PLAYLISTS: "Zuletzt verwendete Playlists",
+    RECENT_PLAYLISTS: "Playlist laden (zuletzt verwendete)",
     MARKER_SET: "Markierung setzen",
     MARKER_PREVIOUS: "Zur vorherigen Markierung",
     MARKER_NEXT: "Zur nächsten Markierung",
