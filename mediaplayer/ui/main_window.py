@@ -47,6 +47,7 @@ from ..settings import AppSettings
 from ..settings import key_bindings as kb
 from .file_browser import FileBrowserDialog
 from .key_config_dialog import KeyConfigDialog
+from .notes_dialog import NotesDialog
 from .recent_playlists_dialog import RecentPlaylistsDialog
 from .tuner_panel import TunerPanel
 from .style import BUTTON_HEIGHT, ICON_SIZE, TRANSPORT_HEIGHT, px
@@ -84,6 +85,28 @@ class PlaylistWidget(QListWidget):
             event.accept()
             return
         super().keyPressEvent(event)
+
+
+class NotePreview(QLabel):
+    """Vorschau der Notiz im Bedienfeld; Antippen öffnet den Notizdialog."""
+
+    clicked = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("notePreview")
+        self.setWordWrap(True)
+        self.setTextFormat(Qt.TextFormat.PlainText)
+        self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        # Lange Notizen werden unten abgeschnitten statt das Bedienfeld zu strecken.
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        self.setMinimumHeight(px(60))
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self.rect().contains(event.position().toPoint()):
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
 
 
 class MainWindow(QMainWindow):
@@ -201,6 +224,7 @@ class MainWindow(QMainWindow):
         left.addWidget(self.tuner_panel)
         self.playlist_view = PlaylistWidget()
         self.playlist_view.playRequested.connect(self.controller.play_index)
+        self.playlist_view.currentRowChanged.connect(lambda _row: self._update_note_preview())
         left.addWidget(self.playlist_view, 1)
         columns.addLayout(left, 0, 0)
         self.playlist_view.setFocus()
@@ -329,6 +353,13 @@ class MainWindow(QMainWindow):
             "Alle löschen", "Alle Markierungen dieses Titels löschen", self.clear_markers
         )
         row = self._add_button_row(panel, row, [self.marker_delete_button, self.marker_clear_button])
+
+        # --- Notiz zum Titel: füllt den restlichen Platz des Bedienfelds
+        #     (ohne eigene Überschrift, damit auch auf Full HD mehrere Zeilen passen).
+        self.note_preview = NotePreview()
+        self.note_preview.setToolTip("Antippen, um die Notiz zu bearbeiten (Taste N)")
+        self.note_preview.clicked.connect(self.edit_note)
+        panel.addWidget(self.note_preview, row, 0, 1, PANEL_COLUMNS)
         panel.setRowStretch(row, 1)  # restlicher Platz unterhalb des Bedienfelds
 
         # --- Untere Leisten: Playlist-Aktionen unter der Liste, Programm unter dem Bedienfeld
@@ -452,6 +483,8 @@ class MainWindow(QMainWindow):
             kb.MARKER_NEXT: self.markers.jump_next,
             kb.MARKER_DELETE: self.markers.delete_nearest,
             kb.TUNER: self.toggle_tuner,
+            # Verzögert öffnen, damit der Dialog nicht innerhalb des Tastenereignisses startet.
+            kb.NOTES: lambda: QTimer.singleShot(0, self, self.edit_note),
             f"{kb.BACK}_single": c.seek_to_start,
             f"{kb.BACK}_double": c.previous_track,
             f"{kb.BACK}_hold_start": lambda: c.start_scrub(-1),
@@ -640,8 +673,10 @@ class MainWindow(QMainWindow):
         for i in range(len(playlist)):
             is_current = i == playlist.current_index
             marker = "▶  " if is_current else "     "
-            item = QListWidgetItem(f"{marker}{i + 1:02d}   {playlist.title(i)}")
-            item.setToolTip(playlist.items[i])
+            note = self.settings.note(playlist.items[i])
+            note_mark = "   ✎" if note else ""
+            item = QListWidgetItem(f"{marker}{i + 1:02d}   {playlist.title(i)}{note_mark}")
+            item.setToolTip(f"{playlist.items[i]}\n\n{note}" if note else playlist.items[i])
             if is_current:
                 font = QFont(view.font())
                 font.setBold(True)
@@ -651,6 +686,51 @@ class MainWindow(QMainWindow):
             view.setCurrentRow(playlist.current_index)
             view.scrollToItem(view.currentItem(), QAbstractItemView.ScrollHint.EnsureVisible)
         view.blockSignals(False)
+        self._update_note_preview()
+
+    # ========================================================== Notizen
+    def _note_index(self) -> int:
+        """Titel für die Notiz: der laufende, sonst der in der Playlist markierte (-1 = keiner)."""
+        playlist = self.controller.playlist
+        if playlist.is_valid_index(playlist.current_index):
+            return playlist.current_index
+        row = self.playlist_view.currentRow()
+        return row if playlist.is_valid_index(row) else -1
+
+    def _update_note_preview(self) -> None:
+        index = self._note_index()
+        playlist = self.controller.playlist
+        if index < 0:
+            self.note_preview.setText("✎  Notiz – kein Titel ausgewählt")
+            self.note_preview.setProperty("empty", True)
+        else:
+            note = self.settings.note(playlist.items[index])
+            self.note_preview.setText(
+                f"✎  {note}" if note else f"✎  Notiz zu „{playlist.title(index)}“ – antippen zum Schreiben"
+            )
+            self.note_preview.setProperty("empty", not note)
+        # Stil (grau für Platzhalter) nach Änderung der Eigenschaft neu anwenden.
+        self.note_preview.style().unpolish(self.note_preview)
+        self.note_preview.style().polish(self.note_preview)
+
+    def edit_note(self) -> None:
+        if not self.keyboard.is_enabled():
+            return  # es ist bereits ein Dialog offen
+        index = self._note_index()
+        if index < 0:
+            self.show_message("Kein Titel ausgewählt – erst einen Titel in der Playlist antippen.")
+            return
+        path = self.controller.playlist.items[index]
+        title = self.controller.playlist.title(index)
+        old = self.settings.note(path)
+        dialog = NotesDialog(title, old, self)
+        if not self._run_modal(dialog.exec) or dialog.text() == old:
+            return
+        if not self.settings.set_note(path, dialog.text()):
+            self.show_message("Notiz konnte nicht gespeichert werden.")
+            return
+        self._refresh_playlist()  # ✎-Symbol und Vorschau aktualisieren
+        self.show_message("Notiz gespeichert." if dialog.text() else "Notiz gelöscht.")
 
     # ======================================================== Aktionen
     def _start_directory(self) -> str:

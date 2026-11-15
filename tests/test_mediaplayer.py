@@ -1267,6 +1267,94 @@ class SplashTests(unittest.TestCase):
         self.assertEqual(result.stdout.strip(), "")
 
 
+class NotesTests(unittest.TestCase):
+    """Notizen zu Titeln: Speicherung, Anzeige im Hauptfenster, Bearbeiten."""
+
+    def test_store_and_reload(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            d = Path(tmp)
+            song = str(make_wav(d / "lied.wav", 0.1))
+            settings = AppSettings(QSettings(str(d / "s.ini"), QSettings.Format.IniFormat))
+            self.assertEqual(settings.note(song), "")
+            self.assertTrue(settings.set_note(song, "  Capo 2\nÄnderung: Schluss langsamer  "))
+            # Neue Instanz liest aus notes.json; Leerraum am Rand wird entfernt.
+            again = AppSettings(QSettings(str(d / "s.ini"), QSettings.Format.IniFormat))
+            self.assertEqual(again.note(song), "Capo 2\nÄnderung: Schluss langsamer")
+            self.assertEqual(again.note(str(d / "." / "lied.wav")), again.note(song))  # gleicher Schlüssel
+            again.set_note(song, "   ")  # leer = löschen
+            self.assertEqual(AppSettings(QSettings(str(d / "s.ini"), QSettings.Format.IniFormat)).note(song), "")
+
+    def test_main_window_preview_and_edit(self):
+        import mediaplayer.ui.main_window as mw
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            d = Path(tmp)
+            songs = [str(make_wav(d / f"s{i}.wav", 0.2)) for i in range(2)]
+            settings = AppSettings(QSettings(str(d / "s.ini"), QSettings.Format.IniFormat))
+            settings.set_note(songs[1], "Einsatz nach 4 Takten")
+            settings.set_session_playlist(songs, 0)
+            w = mw.MainWindow(settings)
+            w.resize(1600, 900)
+            w.show()
+            wait(100)
+
+            # ✎ in der Playlist nur beim Titel mit Notiz.
+            self.assertNotIn("✎", w.playlist_view.item(0).text())
+            self.assertIn("✎", w.playlist_view.item(1).text())
+            self.assertIn("Einsatz nach 4 Takten", w.playlist_view.item(1).toolTip())
+            self.assertTrue(w.note_preview.property("empty"))  # Titel 1 ohne Notiz
+
+            # Notiz zum laufenden Titel schreiben (Dialog durch Attrappe ersetzt).
+            class FakeDialog:
+                answer = "Neue Notiz"
+                seen = None
+
+                def __init__(self, title, text, parent):
+                    FakeDialog.seen = (title, text)
+
+                def exec(self):
+                    return True
+
+                def text(self):
+                    return FakeDialog.answer
+
+            original = mw.NotesDialog
+            mw.NotesDialog = FakeDialog
+            try:
+                w.controller.play_index(0)
+                wait(50)
+                app.sendEvent(w.playlist_view, key_event(QEvent.Type.KeyPress, Qt.Key.Key_N, text="n"))
+                wait(50)  # Taste N öffnet verzögert
+                self.assertEqual(FakeDialog.seen, ("s0", ""))
+                self.assertEqual(settings.note(songs[0]), "Neue Notiz")
+                self.assertIn("✎", w.playlist_view.item(0).text())
+                self.assertIn("Neue Notiz", w.note_preview.text())
+                self.assertFalse(w.note_preview.property("empty"))
+
+                FakeDialog.answer = ""  # leeren = löschen
+                w.note_preview.clicked.emit()
+                self.assertEqual(settings.note(songs[0]), "")
+                self.assertNotIn("✎", w.playlist_view.item(0).text())
+                self.assertIn("gelöscht", w.message_label.text())
+            finally:
+                mw.NotesDialog = original
+            w.controller.stop()
+            w.close()
+            w.deleteLater()
+            wait(100)
+
+    def test_dialog_text(self):
+        from mediaplayer.ui.notes_dialog import NotesDialog
+
+        dlg = NotesDialog("Lied", "alt", None)
+        self.assertEqual(dlg.text(), "alt")
+        dlg.clear_button.click()
+        self.assertEqual(dlg.text(), "")
+        dlg.editor.setPlainText("  neu \n")
+        self.assertEqual(dlg.text(), "neu")
+        dlg.deleteLater()
+
+
 def tearDownModule():
     """Alle Qt-Objekte abbauen, solange die QApplication noch existiert.
 

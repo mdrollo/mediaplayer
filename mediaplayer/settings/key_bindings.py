@@ -28,6 +28,7 @@ MARKER_PREVIOUS = "marker_previous"
 MARKER_NEXT = "marker_next"
 MARKER_DELETE = "marker_delete"
 TUNER = "tuner"
+NOTES = "notes"
 
 ACTIONS = [
     BACK,
@@ -44,6 +45,7 @@ ACTIONS = [
     MARKER_NEXT,
     MARKER_DELETE,
     TUNER,
+    NOTES,
 ]
 
 ACTION_LABELS = {
@@ -61,6 +63,7 @@ ACTION_LABELS = {
     MARKER_NEXT: "Zur nächsten Markierung",
     MARKER_DELETE: "Nächstgelegene Markierung löschen",
     TUNER: "Stimmgerät ein-/ausblenden",
+    NOTES: "Notiz zum Titel bearbeiten",
 }
 
 # Zusätzliche Erklärung für Aktionen mit Sonderverhalten (im Dialog angezeigt).
@@ -89,6 +92,7 @@ DEFAULT_BINDINGS = {
     MARKER_NEXT: [".", ""],
     MARKER_DELETE: ["Shift+M", ""],
     TUNER: ["T", ""],
+    NOTES: ["N", ""],
 }
 
 

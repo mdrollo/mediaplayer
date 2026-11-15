@@ -1,4 +1,4 @@
-"""Dauerhafte Einstellungen (Tastenbelegung, Lautstärke, Geschwindigkeit, Sitzung, Markierungen).
+"""Dauerhafte Einstellungen (Tastenbelegung, Lautstärke, Geschwindigkeit, Sitzung, Markierungen, Notizen).
 
 Gespeichert wird über ``QSettings`` im INI-Format im Benutzerprofil:
 
@@ -31,6 +31,7 @@ class AppSettings:
         )
         self._bpm_cache: dict | None = None
         self._markers: dict | None = None
+        self._notes: dict | None = None
 
     @property
     def file_name(self) -> str:
@@ -321,6 +322,47 @@ class AppSettings:
             os.replace(tmp, self._markers_file)
         except OSError:
             pass
+
+    # ----------------------------------------------------------- Notizen
+    # Eigene JSON-Datei neben der INI: {Dateipfad: "Notiztext"}. Gleicher
+    # Schlüssel wie bei den Markierungen (übersteht das Bearbeiten der Tags).
+    @property
+    def _notes_file(self) -> str:
+        return os.path.join(os.path.dirname(self.file_name), "notes.json")
+
+    def _load_notes(self) -> dict:
+        if self._notes is None:
+            try:
+                with open(self._notes_file, encoding="utf-8") as f:
+                    data = json.load(f)
+                self._notes = data if isinstance(data, dict) else {}
+            except (OSError, ValueError):
+                self._notes = {}
+        return self._notes
+
+    def note(self, path: str) -> str:
+        """Notiz zu einem Titel ("" = keine)."""
+        value = self._load_notes().get(self._marker_key(path), "")
+        return value if isinstance(value, str) else ""
+
+    def set_note(self, path: str, text: str) -> bool:
+        """Notiz speichern; leerer Text löscht sie. False, wenn das Schreiben scheiterte."""
+        data = self._load_notes()
+        key = self._marker_key(path)
+        text = text.strip()
+        if text:
+            data[key] = text
+        else:
+            data.pop(key, None)
+        try:
+            os.makedirs(os.path.dirname(self._notes_file), exist_ok=True)
+            tmp = self._notes_file + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=1)
+            os.replace(tmp, self._notes_file)
+        except OSError:
+            return False
+        return True
 
     # -------------------------------------------------------- Stimmgerät
     def tuner_a4(self, default: float = 440.0) -> float:

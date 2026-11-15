@@ -38,7 +38,7 @@ stattdessen als maximiertes Fenster.
 
 Unter Kopfzeile und Positionsregler ist das Fenster zweigeteilt: links die
 Playlist über die volle Höhe, rechts das Bedienfeld mit Wiedergabe,
-Lautstärke, Tempo und Markierungen. Über der Playlist lässt sich ein
+Lautstärke, Tempo, Markierungen und der Notiz zum Titel. Über der Playlist lässt sich ein
 chromatisches Stimmgerät einblenden.
 
 | Element | Funktion |
@@ -49,7 +49,8 @@ chromatisches Stimmgerät einblenden.
 | Pausen überspringen | Stille am Anfang und Ende der Titel überspringen (Standard: an; blau = aktiv) |
 | Lautstärkeregler | 0–100 %, gehörrichtig (logarithmisch) skaliert |
 | Tempo | Anzeige und Einstellung in **BPM** (siehe unten). Ist das Tempo eines Titels unbekannt, wie bisher 0,50x – 2,00x in 0,01-Schritten. „1,00x“ = Originaltempo |
-| Playlist | Doppelklick oder Eingabetaste startet einen Titel; ▶ und Fettschrift markieren den aktuellen Titel |
+| Playlist | Doppelklick oder Eingabetaste startet einen Titel; ▶ und Fettschrift markieren den aktuellen Titel, ✎ zeigt Titel mit Notiz (Notiz als Tooltip) |
+| Notiz (unten im Bedienfeld) | Notiz zum laufenden – oder, wenn nichts läuft, zum markierten – Titel. Antippen (oder Taste `N`) öffnet die Bearbeitung, siehe unten |
 | Hinzufügen | Audiodateien auswählen (Dateien/Ordner können auch ins Fenster gezogen werden) |
 | Entfernen | Markierten Titel aus der Playlist entfernen |
 | Mischen | Reihenfolge einmal zufällig durchmischen. Der aktuelle Titel rückt nach oben und spielt ungestört weiter. Die gemischte Reihenfolge wird nicht gespeichert – beim nächsten Start gilt wieder die ursprüngliche (außer man speichert sie bewusst mit „Speichern“) |
@@ -137,6 +138,21 @@ eines Refrains, und springst später direkt dorthin.
   werden pro Datei gespeichert (`markers.json` neben der Einstellungsdatei) und
   gelten unabhängig vom eingestellten Tempo.
 
+### Notizen
+
+Zu jedem Titel lässt sich eine Notiz schreiben, z. B. Tonart, Capo, Einsätze,
+Text-Hänger oder Tempo-Hinweise.
+
+- Die Notiz des laufenden Titels steht unten im Bedienfeld (lange Notizen
+  werden dort abgeschnitten). Läuft kein Titel, gilt der in der Playlist
+  markierte.
+- **Bearbeiten:** Notiz antippen oder Taste `N` → Text eingeben →
+  „Speichern“ (oder Strg + Eingabe). „Abbrechen“/Escape verwirft die
+  Änderung, „Leeren“ + „Speichern“ löscht die Notiz.
+- Titel mit Notiz tragen in der Playlist ein ✎; der Tooltip zeigt den Text.
+- Notizen werden pro Datei gespeichert (`notes.json` neben der
+  Einstellungsdatei) und gelten in jeder Playlist, in der der Titel vorkommt.
+
 ### Stimmgerät
 
 Chromatisches Stimmgerät für jedes Instrument (und die Stimme): Es erkennt den
@@ -215,6 +231,7 @@ dann nur geladen, nicht automatisch abgespielt).
 | `,` / `.` | Zur vorherigen / nächsten Markierung springen |
 | `Umschalt + M` | Nächstgelegene Markierung löschen |
 | `T` | Stimmgerät ein-/ausblenden |
+| `N` | Notiz zum Titel bearbeiten |
 
 `+`, `-` und `0` funktionieren auch auf dem Ziffernblock und unabhängig vom
 Tastaturlayout (auf US-Tastaturen ist `+` = Umschalt + `=`).
@@ -278,6 +295,7 @@ mediaplayer/
     waveform_slider.py          Positionsregler mit Wellenform
     splash.py                   Startbildschirm mit Ladefortschritt
     tuner_panel.py              Anzeige des Stimmgeräts (Ton, Cent-Skala)
+    notes_dialog.py             Dialog zum Bearbeiten der Notiz eines Titels
     style.py                    Stylesheet, Klick-springt-Stil für Regler
   selftest.py                   Selbsttest für gepackte Versionen (--selftest)
 tests/

@@ -277,6 +277,26 @@ QLabel#tunerCents {
     font-size: 30px;
     font-weight: bold;
 }
+QLabel#notePreview {
+    font-size: 24px;
+    padding: 12px 14px;
+    background-color: #17181b;
+    border: 2px solid #3a3d44;
+    border-radius: 10px;
+}
+QLabel#notePreview[empty="true"] {
+    color: #6b6f78;
+}
+QPlainTextEdit#notesEditor {
+    font-size: 28px;
+    padding: 10px;
+    background-color: #17181b;
+    border: 2px solid #4a4d55;
+    border-radius: 10px;
+}
+QPlainTextEdit#notesEditor:focus {
+    border-color: #2f6fd6;
+}
 QToolTip {
     font-size: 20px;
 }
